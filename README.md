@@ -2,6 +2,8 @@
 
 A focused, self-hosted news reader that collects complete articles, groups related coverage, ranks stories by personal relevance, and supports search and grounded AI questions.
 
+**Live demo:** [janssen-briefing.vercel.app](https://janssen-briefing.vercel.app)
+
 ## Product tour
 
 - **Daily feed:** browse one day at a time, rank by relevance, and collapse outlets covering the same event.
