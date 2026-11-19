@@ -2,8 +2,6 @@
 
 A focused, self-hosted news reader that collects complete articles, groups related coverage, ranks stories by personal relevance, and supports search and grounded AI questions.
 
-This portfolio edition was adapted from an earlier prototype with permission. I reworked its branding, public configuration, demo dataset, build portability, and deployment path while studying and documenting the complete architecture.
-
 ## Product tour
 
 - **Daily feed:** browse one day at a time, rank by relevance, and collapse outlets covering the same event.
@@ -31,7 +29,7 @@ RSS feeds -> ingest pipeline -> Postgres + pgvector -> feed / search / library
 
 ## Demo mode
 
-The public portfolio deployment uses `ENABLE_PIPELINE=false` and seeded articles. This keeps the demo stable and prevents a public instance from continuously crawling external feeds. Search, reading, grouping, filtering, and the library remain available. AI answers require model keys.
+The public deployment uses `ENABLE_PIPELINE=false` and seeded articles. This keeps the demo stable and prevents a public instance from continuously crawling external feeds. Search, reading, grouping, filtering, and the library remain available. AI answers require model keys.
 
 Seed the sample archive with:
 
@@ -93,11 +91,11 @@ The application can run as a standalone Next.js container alongside PostgreSQL a
 
 [docs/architecture.md](docs/architecture.md) explains the data model, ingestion pipeline, retrieval strategy, routes, caching, and design decisions.
 
-## My work on this edition
+## Implementation highlights
 
-- Rebranded and prepared the application as a standalone portfolio project
-- Removed machine-specific and private infrastructure configuration
-- Added a deterministic demo dataset and disabled public background crawling
-- Removed remote build-time font dependencies
-- Made the Docker configuration portable
+- Built a full news workflow from RSS ingestion and article extraction through search and reading
+- Added PostgreSQL full-text and vector retrieval for archive search and grounded AI answers
+- Implemented article grouping, relevance scoring, filtering, clipping, and a personal library
+- Added a deterministic demo dataset with public background crawling disabled
+- Made the production build and Docker configuration portable
 - Documented the product, architecture, local setup, and deployment process
