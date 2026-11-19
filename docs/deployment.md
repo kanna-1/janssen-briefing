@@ -13,6 +13,7 @@ Janssen's Briefing is designed for a long-running container host because the ful
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+RUN_MIGRATIONS=true
 ENABLE_PIPELINE=false
 OPENAI_API_KEY=
 GEMINI_API_KEY=
@@ -46,7 +47,9 @@ The included Compose file binds the application to `127.0.0.1:3002` so it is not
 
 For a public demonstration:
 
-1. Set `ENABLE_PIPELINE=false`.
-2. Seed only synthetic or publicly licensed content.
-3. Leave model keys unset if AI usage costs should be avoided.
-4. Clearly label unavailable AI and PDF features in the deployment description.
+1. Apply the Drizzle migrations once using the direct database connection.
+2. Set `RUN_MIGRATIONS=false` on serverless platforms so cold starts do not run migrations.
+3. Set `ENABLE_PIPELINE=false`.
+4. Seed only synthetic or publicly licensed content.
+5. Leave model keys unset if AI usage costs should be avoided.
+6. Clearly label unavailable AI and PDF features in the deployment description.
