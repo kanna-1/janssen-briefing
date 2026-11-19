@@ -268,7 +268,10 @@ export function useChat({
         });
 
         if (!response.ok) {
-          throw new Error(`Chat request failed: ${response.status}`);
+          const body = await response.json().catch(() => null);
+          throw new Error(
+            body?.error || `Chat request failed: ${response.status}`
+          );
         }
 
         const reader = response.body?.getReader();

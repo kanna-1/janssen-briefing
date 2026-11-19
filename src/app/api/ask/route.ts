@@ -3,7 +3,6 @@ import { buildGlobalSystemPrompt } from "@/lib/chat";
 import { askTools, executeAskTool } from "@/lib/ask-tools";
 import { getCorpusCoverage } from "@/lib/db/queries";
 import { OPENAI_API_KEY, OPENAI_URL, OPENAI_CHAT_MODEL } from "@/lib/openai";
-import type { SearchSource } from "@/lib/types";
 
 /**
  * Ceiling on model turns in one reply.
@@ -31,6 +30,8 @@ const MAX_TURNS = 6;
  */
 const MAX_TOOL_CALLS = 14;
 
+export const maxDuration = 300;
+
 /** An output item from the Responses API. Only `function_call` is inspected. */
 interface OutputItem {
   type: string;
@@ -40,6 +41,13 @@ interface OutputItem {
 }
 
 export async function POST(request: NextRequest) {
+  if (!OPENAI_API_KEY) {
+    return Response.json(
+      { error: "Ask is not configured. Add OPENAI_API_KEY to the deployment." },
+      { status: 503 }
+    );
+  }
+
   const { messages } = await request.json();
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -63,9 +71,6 @@ export async function POST(request: NextRequest) {
       const send = (payload: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
-      // Web citations accumulate across every turn, so they are collected here
-      // and flushed once rather than per turn.
-      const sources = new Map<string, SearchSource>();
       // Searches overlap heavily — the same article surfaces for several
       // phrasings — so slugs already sent are not sent again.
       const sentArticles = new Set<string>();
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
 
         for (let turn = 0; turn < MAX_TURNS; turn++) {
           const withinBudget = toolCalls < MAX_TOOL_CALLS;
-          const output = await streamTurn(input, send, sources, withinBudget);
+          const output = await streamTurn(input, send, withinBudget);
 
           // Tools were withheld, so this turn is the answer by construction.
           if (!withinBudget) {
@@ -150,10 +155,8 @@ export async function POST(request: NextRequest) {
         // reply, rather than leaving the reader a list of searches and silence.
         if (!answered) {
           console.warn("[ask] Turn limit reached with tools pending; forcing an answer");
-          await streamTurn(input, send, sources, false);
+          await streamTurn(input, send, false);
         }
-
-        if (sources.size > 0) send({ sources: [...sources.values()] });
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
@@ -188,7 +191,6 @@ export async function POST(request: NextRequest) {
 async function streamTurn(
   input: unknown[],
   send: (payload: unknown) => void,
-  sources: Map<string, SearchSource>,
   allowTools: boolean
 ): Promise<OutputItem[]> {
   const response = await fetch(OPENAI_URL, {
@@ -201,7 +203,9 @@ async function streamTurn(
       model: OPENAI_CHAT_MODEL,
       stream: true,
       input,
-      tools: [...askTools, { type: "web_search_preview" }],
+      // Archive questions stay grounded in the articles we ingested. Omitting
+      // general web search also avoids unrelated citations and extra tool cost.
+      tools: askTools,
       // The budget is enforced with tool_choice, not by withholding the tool
       // definitions. Removing them makes the model emit raw call syntax —
       // `to=functions.get_article`, `multi_tool_use.parallel` — as literal
@@ -258,22 +262,8 @@ async function streamTurn(
           continue;
         }
 
-        if (
-          eventType === "response.web_search_call.in_progress" ||
-          eventType === "response.web_search_call.searching"
-        ) {
-          send({ searching: true });
-        } else if (eventType === "response.output_text.delta" && parsed.delta) {
+        if (eventType === "response.output_text.delta" && parsed.delta) {
           send({ text: parsed.delta });
-        } else if (
-          eventType === "response.output_text.annotation.added" &&
-          parsed.annotation?.type === "url_citation" &&
-          parsed.annotation.url
-        ) {
-          sources.set(parsed.annotation.url, {
-            title: parsed.annotation.title || parsed.annotation.url,
-            url: parsed.annotation.url,
-          });
         } else if (eventType === "response.completed" && parsed.response?.output) {
           output = parsed.response.output as OutputItem[];
         } else if (eventType === "response.failed" || eventType === "error") {

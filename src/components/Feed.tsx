@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useArticles } from "@/hooks/useArticles";
 import { FeedFilter, FeedSearch, FeedSort, MobileSettings, ViewToggle } from "@/components/FeedFilter";
 import { DateNav } from "@/components/DateNav";
@@ -11,35 +11,10 @@ import { Masthead } from "@/components/Masthead";
 import { ARCHIVE_TZ } from "@/lib/dates";
 import type { ArticleFilters } from "@/lib/types";
 
-// Module-level flag: only run /api/fetch on the first mount per page load.
-// Back-navigation remounts the component but this stays true, skipping the fetch.
-// A full page reload re-evaluates the module, resetting it to false.
-let hasFetchedOnce = false;
-
 export function Feed({ initialView = "grid", initialFilters }: { initialView?: ViewMode; initialFilters: ArticleFilters }) {
-  const { articles, dates, loading, fetching, error, filters, setFilters, refetch, lastFetchTime, rescoringArticles, rescoreArticle, lastRescoredSlug, deleteArticle } = useArticles(initialFilters);
+  const { articles, dates, loading, fetching, error, filters, setFilters, lastFetchTime, rescoringArticles, rescoreArticle, lastRescoredSlug, deleteArticle } = useArticles(initialFilters);
   const [view, handleViewChange] = useViewMode(FEED_VIEW_COOKIE, initialView);
-  const skipEntranceRef = useRef(hasFetchedOnce);
-
-  // Trigger the fetch pipeline only on the first mount (fresh page load).
-  // On back-navigation the SWR cache provides data instantly, so we skip
-  // the /api/fetch call entirely for a truly silent back experience.
-  useEffect(() => {
-    if (hasFetchedOnce) return;
-    hasFetchedOnce = true;
-
-    fetch("/api/fetch", { method: "POST" })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("[auto-fetch]", data);
-        if (data.newArticles > 0) {
-          skipEntranceRef.current = true;
-          refetch();
-        }
-      })
-      .catch((err) => console.error("[auto-fetch] failed:", err));
-  }, [refetch]);
-
+  const skipEntranceRef = useRef(false);
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 pb-24 md:pb-28">

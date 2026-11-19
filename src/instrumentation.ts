@@ -10,11 +10,16 @@ export async function register() {
       console.log("[migrate] Runtime migrations disabled");
     }
 
-    if (process.env.ENABLE_PIPELINE !== "false") {
+    if (
+      process.env.ENABLE_PIPELINE !== "false" &&
+      process.env.ENABLE_SCHEDULER !== "false"
+    ) {
       const { startScheduler } = await import("./lib/scheduler");
       startScheduler();
-    } else {
+    } else if (process.env.ENABLE_PIPELINE === "false") {
       console.log("[scheduler] Pipeline disabled (ENABLE_PIPELINE=false)");
+    } else {
+      console.log("[scheduler] Process scheduler disabled; using platform cron");
     }
   }
 }

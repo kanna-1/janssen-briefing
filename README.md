@@ -29,9 +29,13 @@ RSS feeds -> ingest pipeline -> Postgres + pgvector -> feed / search / library
 - Readability, Cheerio, and JSDOM for article extraction
 - Docker Compose and Gotenberg for PDF export
 
-## Demo mode
+## Live deployment
 
-The public deployment uses `ENABLE_PIPELINE=false` and seeded articles. This keeps the demo stable and prevents a public instance from continuously crawling external feeds. Search, reading, grouping, filtering, and the library remain available. AI answers require model keys.
+The public deployment ingests TLDR, CNA, and The Straits Times once each morning through an authenticated Vercel Cron route. Page visits never start a crawl. Articles are deduplicated, clipped into readable Markdown, grouped by story, and stored in PostgreSQL.
+
+Ask uses OpenAI's Responses API with archive-only tools. `GEMINI_API_KEY` is optional: when omitted, relevance scoring and vector embeddings are skipped and Ask falls back to PostgreSQL lexical retrieval.
+
+For a stable local demo without external crawling, keep `ENABLE_PIPELINE=false` and seed the sample archive:
 
 Seed the sample archive with:
 
@@ -67,6 +71,7 @@ For the provided local Compose database, use:
 ```env
 DATABASE_URL=postgresql://newsapp:newsapp@localhost:5433/newsapp
 ENABLE_PIPELINE=false
+ENABLE_SCHEDULER=true
 ```
 
 4. Start the application once to apply migrations, then seed the demo:
@@ -87,7 +92,7 @@ npm run build
 
 ## Deployment
 
-The application can run as a standalone Next.js container alongside PostgreSQL and Gotenberg. See [docs/deployment.md](docs/deployment.md) for a provider-neutral deployment checklist.
+The application supports a standalone container scheduler or an authenticated Vercel Cron deployment. See [docs/deployment.md](docs/deployment.md) for the required environment variables and safeguards.
 
 ## Architecture
 
@@ -98,6 +103,6 @@ The application can run as a standalone Next.js container alongside PostgreSQL a
 - Built a full news workflow from RSS ingestion and article extraction through search and reading
 - Added PostgreSQL full-text and vector retrieval for archive search and grounded AI answers
 - Implemented article grouping, relevance scoring, filtering, clipping, and a personal library
-- Added a deterministic demo dataset with public background crawling disabled
+- Added authenticated scheduled ingestion that is independent of page traffic
 - Made the production build and Docker configuration portable
 - Documented the product, architecture, local setup, and deployment process

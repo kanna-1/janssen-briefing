@@ -115,6 +115,8 @@ async function embedBatch(
   texts: string[],
   taskType: TaskType
 ): Promise<number[][] | null> {
+  if (!GEMINI_API_KEY) return null;
+
   const body = JSON.stringify({
     requests: texts.map((text) => ({
       model: `models/${EMBEDDING_MODEL}`,

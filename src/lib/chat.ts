@@ -60,17 +60,11 @@ Searching the archive:
 - Call get_article when a summary is not enough to answer accurately, or when you want to quote.
 - If the archive has nothing on a topic, say so plainly rather than filling the gap from memory.
 
-Web search:
-- The archive is the primary source. Search the web for what it lacks: background the articles assume, or developments more recent than the latest article you found.
-- Say which is which. The reader should be able to tell what came from their own archive and what came from the web.
-- Do NOT search the web for something the archive already answers.
-
 Citing sources:
 - ALWAYS use markdown link syntax: [Title](URL).
 - Cite an archive article by its slug as a relative link: [Article Title](/article/the-slug).
-- Cite a web source by its full URL.
 - Never write plain text references — every source must be a clickable link.
-- Every article a search returns is already shown to the reader as a card beneath your answer, grouped into the ones you cited and the ones you did not, and web sources are listed under it. Linking an article is what marks it as used, so cite inline wherever a claim rests on one — and do not close with a list of what you found, because they can see it.
+- Every article a search returns is already shown to the reader as a card beneath your answer, grouped into the ones you cited and the ones you did not. Linking an article is what marks it as used, so cite inline wherever a claim rests on one — and do not close with a list of what you found, because they can see it.
 
 Answering:
 - Be concise for simple questions. Give more detail for complex or analytical ones.

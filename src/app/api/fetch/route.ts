@@ -1,21 +1,24 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (process.env.ENABLE_PIPELINE === "false") {
-    return NextResponse.json({ message: "Pipeline disabled" });
+    return NextResponse.json({ error: "Pipeline disabled" }, { status: 503 });
   }
 
   const body = await request.json().catch(() => ({}));
 
   try {
     const { getOrStartFetchPipeline } = await import("@/lib/pipeline");
-    // Joins a run already in flight rather than starting a second one — a page
-    // refresh remounts the feed and fires this route again.
+    // Joins a scheduled run already in flight rather than scraping twice.
     const { result, finalize } = await getOrStartFetchPipeline({ date: body.date });
-    // Run scoring + extraction after the response is sent so the request stays
-    // under Cloudflare's ~100s limit and the feed's auto-refresh still fires.
-    // Safe to call on a joined run: `finalize` memoises, so it executes once.
-    after(finalize);
+    await finalize();
     return NextResponse.json(result);
   } catch (error) {
     console.error("[api/fetch] Pipeline error:", error);

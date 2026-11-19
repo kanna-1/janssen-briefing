@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { fetchDigestUrls, scrapeDigestPage, fetchCNAArticles, fetchSTArticles } from "./feeds";
 import { resolveFeedSources } from "./feed-sources";
 import { clipArticle } from "./clipper";
@@ -17,7 +16,8 @@ import {
 } from "./db/queries";
 import { scoreArticle, isScoringQuotaExhausted } from "./scorer";
 import { embedAndStore } from "./embeddings";
-import { archiveDaysAgo } from "./dates";
+import { archiveDaysAgo, archiveToday } from "./dates";
+import { GEMINI_API_KEY } from "./gemini";
 import type { RawArticle, PipelineResult } from "./types";
 
 /**
@@ -90,15 +90,14 @@ async function processInBatches<T, R>(
  * - **Phase 1 (awaited here):** fetch sources, dedup, clip + insert, and match
  *   stories — everything needed for new articles to appear in the feed. The
  *   returned `result` is complete once this resolves.
- * - **Phase 2 (`finalize`):** relevance scoring (rate-limited). Returned as a
- *   continuation so the HTTP route can defer it past the response via `after()`
- *   (keeping the request under Cloudflare's ~100s limit so the feed's
- *   auto-refresh still fires), while the scheduler awaits it inline.
+ * - **Phase 2 (`finalize`):** relevance scoring and embeddings (rate-limited).
+ *   Returned separately so long-running containers can schedule it after a
+ *   response while platform cron jobs can await the complete run.
  */
 export async function runFetchPipeline(options?: {
   date?: string;
 }): Promise<{ result: PipelineResult; finalize: () => Promise<void> }> {
-  const targetDate = options?.date || format(new Date(), "yyyy-MM-dd");
+  const targetDate = options?.date || archiveToday();
   console.log(`[pipeline] Starting fetch for ${targetDate}`);
 
   // 1. Fetch every source the reader has left switched on, in parallel
@@ -283,6 +282,17 @@ export async function runFetchPipeline(options?: {
   // Phase 2: relevance scoring. Deferred so the caller can
   // run it after sending the response (HTTP route) or inline (scheduler).
   const runFinalize = async () => {
+    // Scoring and vector search are optional enhancements. Live ingestion must
+    // still succeed when the deployment has no Gemini account configured;
+    // archive questions then fall back to PostgreSQL lexical search.
+    if (!GEMINI_API_KEY) {
+      console.log("[pipeline] Gemini key not configured; skipping scoring and embeddings");
+      console.log(
+        `[pipeline] Done: ${result.clipped} clipped, ${result.failedClips} failed, ${result.skippedExisting} skipped`
+      );
+      return;
+    }
+
     // Score inserted articles in a throttled pass. scoreArticle self-limits to
     // the Gemini free-tier quota (15 req/min); failures leave relevance_score
     // null (set at insert) for the next backfill run to retry.
@@ -389,10 +399,9 @@ export type PipelineRun = Awaited<ReturnType<typeof runFetchPipeline>>;
 /**
  * In-flight phase-1 runs, keyed by target date.
  *
- * Two things trigger the pipeline — the hourly cron and a fresh load of the
- * feed page (`Feed.tsx` fires `/api/fetch` on first mount, and a refresh
- * counts as a fresh mount) — so overlapping runs are ordinary, not an edge
- * case. They stay *correct* on their own: inserts dedupe on `source_id` and
+ * Scheduled and manually triggered runs may overlap, so duplicate attempts are
+ * ordinary, not an edge case. They stay *correct* on their own: inserts dedupe
+ * on `source_id` and
  * unique constraints turn races into a logged duplicate. What they waste is
  * a second pass over nine feeds, a second round of clipping aimed at the same
  * source sites, and a second `matchStories()`.
@@ -419,7 +428,7 @@ export function getOrStartFetchPipeline(options?: {
 }): Promise<PipelineRun> {
   // Resolved here and passed down, so the map key and the run it guards can
   // never disagree about which day is being fetched.
-  const targetDate = options?.date || format(new Date(), "yyyy-MM-dd");
+  const targetDate = options?.date || archiveToday();
 
   const existing = inFlight.get(targetDate);
   if (existing) {

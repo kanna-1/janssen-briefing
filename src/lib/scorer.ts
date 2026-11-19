@@ -56,6 +56,8 @@ export async function scoreArticle(
   },
   model?: string
 ): Promise<number | null> {
+  if (!GEMINI_API_KEY) return null;
+
   // Checked before the limiter, not after: acquiring first would make every
   // remaining article wait its turn in the 14/min queue only to give up.
   if (isScoringQuotaExhausted()) return null;

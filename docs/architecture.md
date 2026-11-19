@@ -57,11 +57,9 @@ A dateless request means **the newest day**, not the whole archive. Answering it
 literally would ship thousands of articles for a page that shows one day of them.
 Search is the exception, because reaching across days is the point of it.
 
-**How it refreshes.** On the first mount of a page load (a module-level flag, so
-back-navigation is silent), `Feed.tsx` fires `POST /api/fetch` — which starts the
-ingest pipeline or joins one already running — and refetches only if new articles
-actually landed. Separately, an hourly cron inside the server process runs the same
-pipeline. The feed also revalidates when you come back to the tab, throttled to 30
+**How it refreshes.** Ingestion runs independently of readers: Vercel Cron calls the
+authenticated `/api/cron/ingest` route each morning, while a long-running container can
+use the process scheduler. The feed revalidates when you come back to the tab, throttled to 30
 seconds, because read marks are shared and another device may have dimmed a card.
 
 While a freshly ingested article is still waiting on its relevance score, the feed polls
@@ -158,10 +156,8 @@ Declared-but-forbidden is a state it understands. The same trick forces a final 
 if the turn limit arrives while tools are still pending, so you get a reply rather than
 a list of searches and silence.
 
-Tools: `search_articles`, `get_article`, and OpenAI's `web_search_preview`. The prompt
-makes the archive primary and the web supplementary, insists the reader can tell which
-is which, and requires every source to be a markdown link — archive articles as
-`/article/the-slug`, web sources as full URLs.
+Tools: `search_articles` and `get_article`. The model can only use the collected archive,
+and every cited source is a markdown link to `/article/the-slug`.
 
 #### How retrieval actually works
 
@@ -390,9 +386,9 @@ and flicked on a moment later reads as the page having changed the setting.
 
 ## The ingest pipeline
 
-Triggered hourly by `node-cron` inside the server process, and once per fresh load of the
-feed page. Overlapping runs are ordinary rather than an edge case, so a run for a given
-date joins the one already in flight instead of repeating every source fetch, a second
+Triggered by authenticated platform cron in serverless deployments, or `node-cron` in a
+long-running container. It is never triggered by a page visit. Overlapping runs are
+ordinary rather than an edge case, so a run for a given date joins the one already in flight instead of repeating every source fetch, a second
 round of clipping, and another story-matching pass.
 
 ```mermaid
@@ -403,7 +399,7 @@ flowchart LR
         C --> D[insert]
         D --> E[match stories<br/>trigram title similarity]
     end
-    subgraph P2["Phase 2 — deferred past the response"]
+    subgraph P2["Phase 2 — optional AI enrichment"]
         F[score new articles<br/>Gemini, 4 dimensions] --> G[embed new articles<br/>Gemini, batched]
         G --> H[catch-up: unscored, then unembedded<br/>7-day horizon]
     end
@@ -411,10 +407,10 @@ flowchart LR
 ```
 
 **Phase 1** is everything needed for articles to appear in the feed. **Phase 2** is the
-rate-limited tail: the HTTP route defers it with `after()` so the request stays well under
-a reverse proxy's ~100s limit and the feed's auto-refresh still fires, while the cron —
-which has no response to race — awaits it inline. Both callers share one memoised
-`finalize`, so a joined run cannot report itself complete while scoring is still going.
+optional, rate-limited Gemini enrichment. The cron awaits both phases; without a Gemini
+key, scoring and embeddings are skipped and lexical retrieval remains available. Callers
+share one memoised `finalize`, so a joined run cannot report itself complete while
+enrichment is still going.
 
 **Sources.** Ten in the registry: two TLDR sections, four CNA feeds, four Straits Times
 feeds. TLDR is *scraped* from dated digest pages rather than pulled from RSS, and each run
@@ -550,7 +546,7 @@ Indexes worth knowing about, all on `articles`:
   no sort.
 
 **Migrations run themselves.** `src/instrumentation.ts` applies the `drizzle/` folder before
-the first request, then starts the scheduler — which makes `docker compose up` the whole
+the first request, then optionally starts the process scheduler — which makes `docker compose up` the whole
 deploy, and is the only option that works for a production database publishing no port. A
 failed migration exits the process in production rather than serving past it, so a container
 that will not stay up is the signal to read the logs, and `restart: unless-stopped` turns a
@@ -563,7 +559,8 @@ database that was merely slow to start into a few retries.
 | Route | Method | Purpose |
 |---|---|---|
 | `/api/articles` | GET | Feed payload for a set of filters. |
-| `/api/fetch` | POST | Run — or join — the ingest pipeline. |
+| `/api/cron/ingest` | GET | Authenticated scheduled ingest. |
+| `/api/fetch` | POST | Authenticated manual ingest. |
 | `/api/search` | GET | Full-text search with highlights and paging. |
 | `/api/ask` | POST | Archive chat. SSE: text deltas, step chips, article cards, sources. |
 | `/api/chat` | POST | Single-article chat. SSE. |
