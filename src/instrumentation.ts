@@ -5,7 +5,11 @@ export async function register() {
     const { runMigrations } = await import("./lib/migrate");
     await runMigrations();
 
-    const { startScheduler } = await import("./lib/scheduler");
-    startScheduler();
+    if (process.env.ENABLE_PIPELINE !== "false") {
+      const { startScheduler } = await import("./lib/scheduler");
+      startScheduler();
+    } else {
+      console.log("[scheduler] Pipeline disabled (ENABLE_PIPELINE=false)");
+    }
   }
 }

@@ -17,7 +17,7 @@
     "cheerio": "^1.2.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
-    "jsdom": "^29.1.1",
+    "jsdom": "26.1.0",
     "lucide-react": "^1.22.0",
     "motion": "^12.40.0",
     "next": "16.2.9",
@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/jsdom": "^28.0.3",
+    "@types/jsdom": "21.1.7",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",
@@ -52,8 +52,8 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "tsx": "^4.20.6",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

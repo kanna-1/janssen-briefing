@@ -1,5 +1,4 @@
 import * as cron from "node-cron";
-import { getOrStartFetchPipeline } from "./pipeline";
 
 let fetchTask: ReturnType<typeof cron.schedule> | null = null;
 
@@ -15,6 +14,7 @@ export function startScheduler() {
   fetchTask = cron.schedule("0 * * * *", async () => {
     console.log("[scheduler] Running hourly fetch pipeline...");
     try {
+      const { getOrStartFetchPipeline } = await import("./pipeline");
       // No HTTP response to race, so run both phases inline. Joins a run a
       // page load may have started in the last minute instead of duplicating it.
       const { result, finalize } = await getOrStartFetchPipeline();

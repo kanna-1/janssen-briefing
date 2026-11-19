@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { getOrStartFetchPipeline } from "@/lib/pipeline";
 
 export async function POST(request: NextRequest) {
   if (process.env.ENABLE_PIPELINE === "false") {
@@ -9,6 +8,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
 
   try {
+    const { getOrStartFetchPipeline } = await import("@/lib/pipeline");
     // Joins a run already in flight rather than starting a second one — a page
     // refresh remounts the feed and fires this route again.
     const { result, finalize } = await getOrStartFetchPipeline({ date: body.date });
