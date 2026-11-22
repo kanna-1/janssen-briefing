@@ -17,9 +17,10 @@ interface ArticleContextMenuProps {
   title: string;
   children: (
     menuTrigger: React.ReactNode,
-    setActive: (active: { slug: string; read: boolean }) => void
+    setActive: (active: { slug: string; read: boolean; library: boolean }) => void
   ) => React.ReactNode;
   onRescore?: (slug: string) => void;
+  onSave?: (slug: string) => void;
   onDelete?: (slug: string) => void;
   /**
    * Wording for the destructive item. The library overrides it for a saved
@@ -35,20 +36,22 @@ interface ArticleContextMenuProps {
   readToggle?: boolean;
 }
 
-export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, children, onRescore, onDelete, deleteLabel = "Delete", readToggle = false }: ArticleContextMenuProps) {
+export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, children, onRescore, onSave, onDelete, deleteLabel = "Delete", readToggle = false }: ArticleContextMenuProps) {
   const slugRef = useRef(slug);
   const readRef = useRef(false);
+  const libraryRef = useRef(false);
   const sourceUrlRef = useRef(sourceUrl);
   const sourceDomainRef = useRef(sourceDomain);
   const titleRef = useRef(title);
-  const setActive = useCallback((a: { slug: string; read: boolean }) => {
+  const setActive = useCallback((a: { slug: string; read: boolean; library: boolean }) => {
     slugRef.current = a.slug;
     readRef.current = a.read;
+    libraryRef.current = a.library;
   }, []);
   // The slug is captured when the menu opens rather than read off the ref
   // while rendering: a grouped card swaps `slugRef` as it is swiped, and the
   // menu has to keep acting on — and describing — the source it was opened on.
-  const [menu, setMenu] = useState<{ x: number; y: number; origin: string; slug: string; read: boolean } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; origin: string; slug: string; read: boolean; library: boolean } | null>(null);
   // The feed server-renders its cards, and this portal targets document.body,
   // which does not exist there. Nothing is in the portal until a right-click
   // opens the menu, so waiting for hydration costs no visible markup — and it
@@ -75,6 +78,7 @@ export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, child
       origin,
       slug: slugRef.current,
       read: readRef.current,
+      library: libraryRef.current,
     });
   }, []);
 
@@ -130,6 +134,12 @@ export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, child
 
   const handleRescore = () => {
     onRescore?.(slugRef.current);
+    close();
+  };
+
+  const handleSave = () => {
+    if (!menu || menu.library) return;
+    onSave?.(menu.slug);
     close();
   };
 
@@ -194,6 +204,16 @@ export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, child
                   className="w-full text-left px-4 py-2 text-sm hover:bg-accent/10 transition-colors cursor-pointer"
                 >
                   {menu.read ? "Mark as unread" : "Mark as read"}
+                </button>
+              )}
+              {onSave && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={menu.library}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-accent/10 transition-colors cursor-pointer disabled:text-muted disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  {menu.library ? "Saved to library" : "Save to library"}
                 </button>
               )}
               <button

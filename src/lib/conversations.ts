@@ -1,4 +1,4 @@
-import { OPENAI_API_KEY, OPENAI_CHAT_MODEL, OPENAI_URL } from "./openai";
+import { OPENROUTER_API_KEY, streamOpenRouterChat } from "./openrouter";
 import { MAX_TITLE_LENGTH, fallbackTitle } from "./conversation-title";
 import type { AskStep, ChatMessage, RetrievedArticle, SearchSource } from "./types";
 
@@ -169,49 +169,10 @@ function tidyTitle(raw: string): string {
 }
 
 
-/** An output item from the Responses API, as far as reading one answer needs. */
-interface OutputItem {
-  type: string;
-  content?: Array<{ type: string; text?: string }>;
-}
-
-/**
- * The assistant's prose out of a non-streaming Responses reply.
- *
- * `output` is a list, not a message: a reasoning model puts a `reasoning` item
- * in front of its answer, and the `output_text` convenience property that would
- * skip past all this belongs to the SDK rather than the HTTP response. So the
- * message items are picked out and their text parts joined.
- *
- * Returns "" for a reply that carries no text at all — a response cut short by
- * the token cap reports `status: "incomplete"` and an output holding nothing
- * but reasoning, which is indistinguishable here from any other failure and is
- * treated the same way: the caller falls back.
- */
-function readOutputText(output: unknown): string {
-  if (!Array.isArray(output)) return "";
-
-  return (output as OutputItem[])
-    .filter((item) => item.type === "message")
-    .flatMap((item) => item.content ?? [])
-    .filter((part) => part.type === "output_text")
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
-}
-
 /**
  * Name a conversation from its opening exchange.
  *
- * The same OpenAI model that answered the question, deliberately. An earlier
- * version sent this to Gemini flash-lite on the grounds that a reasoning model
- * is an absurd instrument for writing four words — but what makes it absurd is
- * the reasoning effort, which is a parameter, and `low` settles it. Against
- * that saving stood a real cost: flash-lite's free tier allows 15 requests a
- * minute per model and the relevance scorer already paces itself to 14 of
- * them, so titles would have been contending for a bucket the hourly pipeline
- * empties, and losing that race means a chat is named by its fallback forever.
- * One provider for the whole Ask feature, on the key that has no such cliff.
+ * Uses the same OpenRouter free pool as the reply, with a very small output cap.
  *
  * Only the first exchange is sent, and the answer only in part. A title
  * describes what the chat is *about*, which the opening question settles;
@@ -225,7 +186,7 @@ function readOutputText(output: unknown): string {
 export async function generateConversationTitle(messages: ChatMessage[]): Promise<string> {
   const fallback = fallbackTitle(messages);
 
-  if (!OPENAI_API_KEY) return fallback;
+  if (!OPENROUTER_API_KEY) return fallback;
 
   const question = messages.find((m) => m.role === "user")?.content.trim() ?? "";
   const answer = messages.find((m) => m.role === "assistant")?.content.trim() ?? "";
@@ -246,41 +207,11 @@ Question: ${question.slice(0, TITLE_QUESTION_CHARS)}
 ${answer ? `Answer: ${answer.slice(0, TITLE_ANSWER_CHARS)}` : ""}`;
 
   try {
-    const response = await fetch(OPENAI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_CHAT_MODEL,
-        input: [{ role: "user", content: prompt }],
-        // `low`, not `minimal`. Naming a conversation needs no deliberation, but
-        // an effort level the model rejects is a 400 — and a 400 here is silent,
-        // permanent, and identical in appearance to working correctly, because
-        // every chat would simply be named by its fallback. `low` is accepted
-        // across the whole reasoning family; the saving from `minimal` is not
-        // worth finding out the hard way.
-        reasoning: { effort: "low" },
-        // Reasoning tokens are drawn from this budget too, so it is set well
-        // above what a title needs. Too tight a cap does not truncate the
-        // title — it spends the whole allowance thinking and returns an
-        // `incomplete` response with no text in it at all.
-        max_output_tokens: 2_000,
-      }),
-      // Nothing is waiting on this — the answer finished streaming before the
-      // save began — but the request holding it open is, and a title is not
-      // worth a hung handler.
-      signal: AbortSignal.timeout(20_000),
+    const response = await streamOpenRouterChat({
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 80,
     });
-
-    if (!response.ok) {
-      console.warn(`[conversations] Title generation failed: ${response.status}`);
-      return fallback;
-    }
-
-    const data = await response.json();
-    const title = tidyTitle(readOutputText(data.output));
+    const title = tidyTitle(response.content ?? "");
 
     return title.length >= 3 ? title : fallback;
   } catch (error) {

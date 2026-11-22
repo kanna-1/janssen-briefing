@@ -37,8 +37,23 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
 
+  if (body?.slug && typeof body.slug === "string") {
+    const existing = await getArticleBySlug(body.slug);
+    if (!existing) {
+      return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    }
+    if (existing.library) {
+      return NextResponse.json({ status: "duplicate", article: existing });
+    }
+
+    await addToLibrary(existing.slug);
+    const saved = await getArticleBySlug(existing.slug);
+    console.log(`[library] Saved from feed: ${existing.title.slice(0, LOG_TITLE_LEN)}`);
+    return NextResponse.json({ status: "saved", article: saved ?? existing });
+  }
+
   if (!body?.url || typeof body.url !== "string") {
-    return NextResponse.json({ error: "url is required" }, { status: 400 });
+    return NextResponse.json({ error: "url or slug is required" }, { status: 400 });
   }
 
   const url = parsePastedUrl(body.url);

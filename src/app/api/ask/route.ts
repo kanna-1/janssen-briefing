@@ -2,68 +2,47 @@ import { NextRequest } from "next/server";
 import { buildGlobalSystemPrompt } from "@/lib/chat";
 import { askTools, executeAskTool } from "@/lib/ask-tools";
 import { getCorpusCoverage } from "@/lib/db/queries";
-import { OPENAI_API_KEY, OPENAI_URL, OPENAI_CHAT_MODEL } from "@/lib/openai";
+import {
+  OPENROUTER_API_KEY,
+  normaliseChatHistory,
+  streamOpenRouterChat,
+  type OpenRouterMessage,
+  type OpenRouterTool,
+} from "@/lib/openrouter";
 
-/**
- * Ceiling on model turns in one reply.
- *
- * A turn is one round trip: the model either answers or asks for a tool. Two
- * or three is the normal shape — search, maybe search again with better terms,
- * answer — and the cap exists only so a model that keeps searching without
- * concluding cannot bill an unbounded number of round trips against a single
- * question.
- */
-const MAX_TURNS = 6;
+const MAX_TURNS = 3;
+const MAX_TOOL_CALLS = 4;
 
-/**
- * Ceiling on tool calls across a whole reply.
- *
- * Turns alone are not a budget: the model issues several calls per turn, and
- * an observed run spent 17 of them — thirteen searches, five of which returned
- * nothing — before answering. Each search costs a query embedding against a
- * 1,000-per-day allowance, so an unbounded appetite for searching is what
- * would actually exhaust the free tier. Past this the model is told to answer
- * with what it has, rather than the reply being truncated.
- *
- * Set with headroom above the two or three searches a normal question takes,
- * because cutting in mid-investigation produces a visibly hedged answer.
- */
-const MAX_TOOL_CALLS = 14;
+export const maxDuration = 120;
 
-export const maxDuration = 300;
-
-/** An output item from the Responses API. Only `function_call` is inspected. */
-interface OutputItem {
-  type: string;
-  call_id?: string;
-  name?: string;
-  arguments?: string;
-}
+const archiveTools: OpenRouterTool[] = askTools.map((tool) => ({
+  type: "function",
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters as Record<string, unknown>,
+  },
+}));
 
 export async function POST(request: NextRequest) {
-  if (!OPENAI_API_KEY) {
+  if (!OPENROUTER_API_KEY) {
     return Response.json(
-      { error: "Ask is not configured. Add OPENAI_API_KEY to the deployment." },
+      { error: "Ask is not configured. Add OPENROUTER_API_KEY to the deployment." },
       { status: 503 }
     );
   }
 
-  const { messages } = await request.json();
-
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const body = await request.json().catch(() => null);
+  const history = normaliseChatHistory(body?.messages);
+  if (history.length === 0) {
     return Response.json({ error: "Missing messages" }, { status: 400 });
   }
 
   const coverage = await getCorpusCoverage();
-
-  const input: unknown[] = [
+  const messages: OpenRouterMessage[] = [
     { role: "system", content: buildGlobalSystemPrompt(coverage ?? undefined) },
-    ...messages.map((m: { role: string; content: string }) => ({
-      role: m.role,
-      content: m.content,
-    })),
+    ...history,
   ];
-
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -71,91 +50,70 @@ export async function POST(request: NextRequest) {
       const send = (payload: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
-      // Searches overlap heavily — the same article surfaces for several
-      // phrasings — so slugs already sent are not sent again.
       const sentArticles = new Set<string>();
-      /**
-       * Results keyed by tool + arguments, for the life of one reply.
-       *
-       * The model repeats itself — sometimes twice in a single turn, issuing
-       * two identical `search_articles` calls in parallel, sometimes again a
-       * turn later. Every repeat used to run the query again, cost another
-       * embedding against a 1,000-a-day allowance, and show the reader the
-       * same search twice.
-       *
-       * The call still has to be *answered* each time: the API pairs one
-       * `function_call_output` to every `call_id`, so what is reused is the
-       * result, not the reply.
-       */
       const toolResults = new Map<string, Awaited<ReturnType<typeof executeAskTool>>>();
       let toolCalls = 0;
 
       try {
-        // Whether a turn produced prose rather than another tool request. The
-        // loop can otherwise run out of turns mid-investigation and close the
-        // stream having sent retrieval steps and no reply at all.
         let answered = false;
 
         for (let turn = 0; turn < MAX_TURNS; turn++) {
-          const withinBudget = toolCalls < MAX_TOOL_CALLS;
-          const output = await streamTurn(input, send, withinBudget);
+          const toolsAllowed = toolCalls < MAX_TOOL_CALLS;
+          const reply = await streamOpenRouterChat({
+            messages,
+            tools: archiveTools,
+            toolChoice: toolsAllowed ? "auto" : "none",
+            onText: toolsAllowed ? undefined : (text) => send({ text }),
+          });
+          const calls = reply.tool_calls ?? [];
 
-          // Tools were withheld, so this turn is the answer by construction.
-          if (!withinBudget) {
-            answered = true;
-            break;
-          }
-
-          // Everything the turn produced goes back verbatim, reasoning items
-          // included — dropping those costs the model its chain of thought
-          // across the tool call it just asked for.
-          input.push(...output);
-
-          const calls = output.filter(
-            (item): item is OutputItem & { call_id: string; name: string } =>
-              item.type === "function_call" && !!item.call_id && !!item.name
-          );
-
-          // No tool requested means the model answered; the reply is complete.
           if (calls.length === 0) {
+            if (toolsAllowed && reply.content) send({ text: reply.content });
             answered = true;
             break;
           }
 
+          messages.push(reply);
           for (const call of calls) {
-            const key = `${call.name}:${call.arguments ?? ""}`;
+            const key = `${call.function.name}:${call.function.arguments}`;
             const cached = toolResults.get(key);
-            const result = cached ?? (await executeAskTool(call.name, call.arguments ?? "{}"));
+            const withinBudget = Boolean(cached) || toolCalls < MAX_TOOL_CALLS;
+            const result = withinBudget
+              ? cached ??
+                (await executeAskTool(call.function.name, call.function.arguments || "{}"))
+              : {
+                  output: "Tool budget reached. Answer using the results already gathered.",
+                  detail: "tool budget reached",
+                };
 
-            // A repeat costs nothing to serve, so it does not spend budget and
-            // is not shown again — the reader saw that search the first time.
-            if (!cached) {
+            if (!cached && withinBudget) {
               toolResults.set(key, result);
               toolCalls++;
-
-              const fresh = (result.articles ?? []).filter((a) => !sentArticles.has(a.slug));
-              for (const a of fresh) sentArticles.add(a.slug);
-
+              const fresh = (result.articles ?? []).filter(
+                (article) => !sentArticles.has(article.slug)
+              );
+              for (const article of fresh) sentArticles.add(article.slug);
               send({
-                step: { tool: call.name, detail: result.detail },
+                step: { tool: call.function.name, detail: result.detail },
                 ...(fresh.length ? { articles: fresh } : {}),
               });
             }
 
-            input.push({
-              type: "function_call_output",
-              call_id: call.call_id,
-              output: result.output,
+            messages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: result.output,
             });
           }
         }
 
-        // Ran out of turns while the model was still calling tools. One more
-        // pass with tool_choice "none" turns what it has gathered into a
-        // reply, rather than leaving the reader a list of searches and silence.
         if (!answered) {
-          console.warn("[ask] Turn limit reached with tools pending; forcing an answer");
-          await streamTurn(input, send, false);
+          await streamOpenRouterChat({
+            messages,
+            tools: archiveTools,
+            toolChoice: "none",
+            onText: (text) => send({ text }),
+          });
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -176,103 +134,4 @@ export async function POST(request: NextRequest) {
       Connection: "keep-alive",
     },
   });
-}
-
-/**
- * Streams one model turn, forwarding text to the client as it arrives, and
- * returns the turn's completed output items.
- *
- * The items come from `response.completed` rather than being assembled from
- * `function_call_arguments` deltas. That event carries the finished output
- * array exactly as a non-streaming call would return it — and the deltas'
- * matching `.done` event omits the function name entirely, so reconstructing
- * calls from them would mean tracking names separately for no gain.
- */
-async function streamTurn(
-  input: unknown[],
-  send: (payload: unknown) => void,
-  allowTools: boolean
-): Promise<OutputItem[]> {
-  const response = await fetch(OPENAI_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_CHAT_MODEL,
-      stream: true,
-      input,
-      // Archive questions stay grounded in the articles we ingested. Omitting
-      // general web search also avoids unrelated citations and extra tool cost.
-      tools: askTools,
-      // The budget is enforced with tool_choice, not by withholding the tool
-      // definitions. Removing them makes the model emit raw call syntax —
-      // `to=functions.get_article`, `multi_tool_use.parallel` — as literal
-      // answer text, because it still intends to call a tool and no longer has
-      // a channel for it. Declared-but-forbidden is a state it understands.
-      tool_choice: allowTools ? "auto" : "none",
-      reasoning: { effort: "medium" },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errorBody}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body from OpenAI");
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let eventType = "";
-  let output: OutputItem[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        eventType = "";
-        continue;
-      }
-
-      if (trimmed.startsWith("event: ")) {
-        eventType = trimmed.slice(7);
-        continue;
-      }
-
-      if (!trimmed.startsWith("data: ")) continue;
-      const data = trimmed.slice(6);
-      if (!data) continue;
-
-        // Parsing is guarded on its own so that a failure raised while
-        // handling an event is not mistaken for malformed SSE and swallowed.
-        let parsed;
-        try {
-          parsed = JSON.parse(data);
-        } catch {
-          continue;
-        }
-
-        if (eventType === "response.output_text.delta" && parsed.delta) {
-          send({ text: parsed.delta });
-        } else if (eventType === "response.completed" && parsed.response?.output) {
-          output = parsed.response.output as OutputItem[];
-        } else if (eventType === "response.failed" || eventType === "error") {
-          throw new Error(
-            parsed.response?.error?.message ?? parsed.message ?? "Model turn failed"
-          );
-        }
-    }
-  }
-
-  return output;
 }

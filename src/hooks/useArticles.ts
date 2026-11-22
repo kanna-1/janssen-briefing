@@ -26,6 +26,7 @@ interface UseArticlesReturn {
   rescoringArticles: Set<string>;
   rescoreArticle: (slug: string) => void;
   lastRescoredSlug: string | null;
+  saveArticle: (slug: string) => Promise<void>;
   deleteArticle: (slug: string) => Promise<void>;
 }
 
@@ -274,6 +275,42 @@ export function useArticles(initialFilters: ArticleFilters): UseArticlesReturn {
       });
   }, [mutate]);
 
+  const saveArticle = useCallback((slug: string) => {
+    return fetch("/api/library", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "Couldn't save that article");
+        return body as { status: "saved" | "duplicate" };
+      })
+      .then((body) => {
+        mutate(
+          (current) => {
+            if (!current) return current;
+            const savedAt = new Date().toISOString();
+            const articles = current.articles.map((article) => ({
+              ...article,
+              ...(article.slug === slug ? { library: true, savedAt } : {}),
+              relatedArticles: article.relatedArticles?.map((related) =>
+                related.slug === slug ? { ...related, library: true, savedAt } : related
+              ),
+            }));
+            return { ...current, articles };
+          },
+          { revalidate: false }
+        );
+        if (body.status === "duplicate") toast.warning("Already in your library");
+        else toast.success("Saved to your library");
+      })
+      .catch((error: Error) => {
+        toast.danger(error.message);
+        throw error;
+      });
+  }, [mutate]);
+
   // The server hands this page its first screen through SWR's `fallback` map,
   // which is consulted beside the cache rather than written into it. Two of
   // SWR's behaviours read the cache directly and so cannot see it:
@@ -320,6 +357,7 @@ export function useArticles(initialFilters: ArticleFilters): UseArticlesReturn {
     rescoringArticles,
     rescoreArticle,
     lastRescoredSlug,
+    saveArticle,
     deleteArticle,
   };
 }

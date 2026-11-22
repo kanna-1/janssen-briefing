@@ -27,12 +27,13 @@ interface ArticleGridProps {
   sort?: string;
   rescoringArticles?: Set<string>;
   onRescore?: (slug: string) => void;
+  onSave?: (slug: string) => Promise<void>;
   onDelete?: (slug: string) => Promise<void>;
   lastRescoredSlug?: string | null;
   skipEntranceRef?: React.MutableRefObject<boolean>;
 }
 
-export function ArticleGrid({ articles, loading, fetching, view = "grid", sort, rescoringArticles, onRescore, onDelete, lastRescoredSlug, skipEntranceRef }: ArticleGridProps) {
+export function ArticleGrid({ articles, loading, fetching, view = "grid", sort, rescoringArticles, onRescore, onSave, onDelete, lastRescoredSlug, skipEntranceRef }: ArticleGridProps) {
   const genRef = useRef(0);
   const prevKeysRef = useRef<Set<string> | null>(null);
   const skipGenRef = useRef(false);
@@ -170,6 +171,7 @@ export function ArticleGrid({ articles, loading, fetching, view = "grid", sort, 
               sourceDomain={article.sourceDomain}
               title={article.title}
               onRescore={onRescore}
+              onSave={onSave ? (slug) => { onSave(slug).catch(() => {}); } : undefined}
               onDelete={handleDelete}
               readToggle
             >

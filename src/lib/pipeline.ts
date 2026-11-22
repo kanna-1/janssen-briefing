@@ -1,4 +1,10 @@
-import { fetchDigestUrls, scrapeDigestPage, fetchCNAArticles, fetchSTArticles } from "./feeds";
+import {
+  fetchDigestUrls,
+  scrapeDigestPage,
+  fetchCNAArticles,
+  fetchSTArticles,
+  fetchGenericRSSArticles,
+} from "./feeds";
 import { resolveFeedSources } from "./feed-sources";
 import { clipArticle } from "./clipper";
 import { buildArticle } from "./articles";
@@ -125,10 +131,13 @@ export async function runFetchPipeline(options?: {
         });
       }
     } else {
-      const fetchArticles = source.kind === "cna" ? fetchCNAArticles : fetchSTArticles;
       tasks.push({
         label: source.id,
-        run: () => fetchArticles(source.url, source.feed),
+        run: () => {
+          if (source.kind === "cna") return fetchCNAArticles(source.url, source.feed);
+          if (source.kind === "st") return fetchSTArticles(source.url, source.feed);
+          return fetchGenericRSSArticles(source.url, source.feed, source.outlet);
+        },
       });
     }
   }

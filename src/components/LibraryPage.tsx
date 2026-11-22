@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@heroui/react/button";
 import { Kbd } from "@heroui/react/kbd";
+import { ListBox, ListBoxItem, Select, Tabs } from "@heroui/react";
 import { Plus, X } from "lucide-react";
 import { useLibrary } from "@/hooks/useLibrary";
 import { LibraryGrid } from "@/components/LibraryGrid";
@@ -11,6 +12,10 @@ import { SearchInput, ViewToggle } from "@/components/FeedFilter";
 import type { ViewMode } from "@/components/ArticleGrid";
 import { LIBRARY_VIEW_COOKIE } from "@/lib/view-cookie";
 import { useViewMode } from "@/hooks/useViewMode";
+import { LIBRARY_FEED } from "@/lib/types";
+
+type LibraryScope = "all" | "feed" | "links";
+type LibrarySort = "saved" | "published";
 
 /** The box growing from button to field. Springy enough to feel physical. */
 const EXPAND_TRANSITION = { type: "spring", duration: 0.4, bounce: 0.15 } as const;
@@ -76,6 +81,8 @@ export function LibraryPage({ initialView = "grid" }: { initialView?: ViewMode }
   const [view, handleViewChange] = useViewMode(LIBRARY_VIEW_COOKIE, initialView);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [scope, setScope] = useState<LibraryScope>("all");
+  const [sort, setSort] = useState<LibrarySort>("saved");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Opening the field and not focusing it would leave the reader with a text
@@ -133,8 +140,21 @@ export function LibraryPage({ initialView = "grid" }: { initialView?: ViewMode }
   };
 
 
+  const visibleArticles = useMemo(() => {
+    const scoped = articles.filter((article) => {
+      if (scope === "feed") return article.feed !== LIBRARY_FEED;
+      if (scope === "links") return article.feed === LIBRARY_FEED;
+      return true;
+    });
+    if (sort === "published") {
+      return [...scoped].sort((a, b) => b.date.localeCompare(a.date));
+    }
+    return scoped;
+  }, [articles, scope, sort]);
+
+  const visiblePending = scope === "feed" ? [] : pending;
   const searching = search.trim().length > 0;
-  const isEmpty = !loading && articles.length === 0 && pending.length === 0;
+  const isEmpty = !loading && visibleArticles.length === 0 && visiblePending.length === 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 pb-24 md:pb-28">
@@ -215,7 +235,7 @@ export function LibraryPage({ initialView = "grid" }: { initialView?: ViewMode }
                   onPress={() => setOpen(true)}
                 >
                   <Plus className="h-4 w-4" />
-                  Add
+                  Add link
                   {/* The hint belongs on the resting state, where the shortcut
                       is live. Inside the field ⌘V is an ordinary paste, so
                       showing it there would advertise a behaviour that no
@@ -228,20 +248,48 @@ export function LibraryPage({ initialView = "grid" }: { initialView?: ViewMode }
         </motion.div>
       </div>
 
-      {/* Count on the left, controls on the right — the home feed's toolbar
-          shape, with the filter and sort it has no use for left out. */}
-      <div className="flex items-center justify-between gap-2 mb-6">
+      <div className="flex flex-col gap-3 mb-6 md:flex-row md:items-center md:justify-between">
+        <Tabs
+          variant="secondary"
+          selectedKey={scope}
+          onSelectionChange={(key) => setScope(key as LibraryScope)}
+        >
+          <Tabs.ListContainer>
+            <Tabs.List aria-label="Library scope">
+              <Tabs.Tab id="all">All<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="feed">Saved<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="links">Added links<Tabs.Indicator /></Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+        </Tabs>
+
+        <div className="flex items-center gap-2">
         <span className="text-xs text-muted shrink-0 max-md:sr-only">
-          {articles.length} {articles.length === 1 ? "article" : "articles"}
+          {visibleArticles.length} {visibleArticles.length === 1 ? "article" : "articles"}
           {searching && " found"}
         </span>
-        <div className="flex items-center gap-3 max-md:flex-1">
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search your library..."
             aria-label="Search your library"
           />
+          <Select
+            aria-label="Sort library"
+            selectedKey={sort}
+            onSelectionChange={(key) => setSort(key as LibrarySort)}
+          >
+            <Select.Trigger className="min-w-[128px]">
+              <Select.Value />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                <ListBoxItem id="saved" textValue="Recently saved">Recently saved</ListBoxItem>
+                <ListBoxItem id="published" textValue="Newest published">Newest published</ListBoxItem>
+              </ListBox>
+            </Select.Popover>
+          </Select>
           <ViewToggle view={view} onViewChange={handleViewChange} />
         </div>
       </div>
@@ -273,8 +321,8 @@ export function LibraryPage({ initialView = "grid" }: { initialView?: ViewMode }
         </div>
       ) : (
         <LibraryGrid
-          articles={articles}
-          pending={pending}
+          articles={visibleArticles}
+          pending={visiblePending}
           loading={loading}
           view={view}
           onRemove={removeArticle}

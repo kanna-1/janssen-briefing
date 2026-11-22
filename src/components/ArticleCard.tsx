@@ -13,7 +13,7 @@ interface ArticleCardProps {
   rescoringArticles?: Set<string>;
   menuTrigger?: React.ReactNode;
   /** Reports the source currently showing, and whether it counts as read. */
-  onActiveChange?: (active: { slug: string; read: boolean }) => void;
+  onActiveChange?: (active: { slug: string; read: boolean; library: boolean }) => void;
   /** See ArticleRow — overrides title rendering so search can mark matches. */
   renderTitle?: (article: Article) => React.ReactNode;
 }
@@ -25,8 +25,8 @@ export function ArticleCard({ article, rescoringArticles, menuTrigger, onActiveC
   const read = useReadState(active.slug, active.read);
 
   useEffect(() => {
-    onActiveChange?.({ slug: active.slug, read });
-  }, [active.slug, read, onActiveChange]);
+    onActiveChange?.({ slug: active.slug, read, library: active.library });
+  }, [active.slug, active.library, read, onActiveChange]);
 
   // The switcher's own click handler is the one that swallows the click that
   // ended a swipe, so it has to run first and have its verdict respected: a

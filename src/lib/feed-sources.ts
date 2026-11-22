@@ -33,7 +33,7 @@ export const NEWS_FEEDS: readonly { value: NewsFeed; label: string }[] = [
  * `tldr` is scraped from a dated digest page rather than pulled from RSS,
  * which is why its `url` is the section landing page and not a feed endpoint.
  */
-export type SourceKind = "tldr" | "cna" | "st";
+export type SourceKind = "tldr" | "cna" | "st" | "rss";
 
 export interface FeedSource {
   /**
@@ -48,7 +48,7 @@ export interface FeedSource {
   feed: NewsFeed;
   kind: SourceKind;
   /**
-   * The RSS endpoint, for `cna` and `st`. TLDR has none — its digests are
+   * The RSS endpoint for RSS-backed sources. TLDR has none — its digests are
    * scraped per day, so this is the section page a reader would recognise and
    * the dated URLs are derived from `feed` at fetch time.
    */
@@ -80,6 +80,48 @@ export const FEED_SOURCES: readonly FeedSource[] = [
     url: "https://tldr.tech/ai",
   },
   {
+    id: "guardian-ai",
+    outlet: "The Guardian",
+    feed: "ai",
+    kind: "rss",
+    url: "https://www.theguardian.com/technology/artificialintelligenceai/rss",
+  },
+  {
+    id: "the-verge-ai",
+    outlet: "The Verge",
+    feed: "ai",
+    kind: "rss",
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+  },
+  {
+    id: "techcrunch-ai",
+    outlet: "TechCrunch",
+    feed: "ai",
+    kind: "rss",
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/",
+  },
+  {
+    id: "guardian-tech",
+    outlet: "The Guardian",
+    feed: "tech",
+    kind: "rss",
+    url: "https://www.theguardian.com/technology/rss",
+  },
+  {
+    id: "techcrunch-tech",
+    outlet: "TechCrunch",
+    feed: "tech",
+    kind: "rss",
+    url: "https://techcrunch.com/feed/",
+  },
+  {
+    id: "ars-technica",
+    outlet: "Ars Technica",
+    feed: "tech",
+    kind: "rss",
+    url: "https://feeds.arstechnica.com/arstechnica/index",
+  },
+  {
     id: "cna-singapore",
     outlet: "CNA",
     feed: "singapore",
@@ -94,6 +136,20 @@ export const FEED_SOURCES: readonly FeedSource[] = [
     url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6311",
   },
   {
+    id: "guardian-world",
+    outlet: "The Guardian",
+    feed: "world",
+    kind: "rss",
+    url: "https://www.theguardian.com/world/rss",
+  },
+  {
+    id: "al-jazeera-world",
+    outlet: "Al Jazeera",
+    feed: "world",
+    kind: "rss",
+    url: "https://www.aljazeera.com/xml/rss/all.xml",
+  },
+  {
     id: "cna-asia",
     outlet: "CNA",
     feed: "asia",
@@ -101,11 +157,25 @@ export const FEED_SOURCES: readonly FeedSource[] = [
     url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511",
   },
   {
+    id: "guardian-asia",
+    outlet: "The Guardian",
+    feed: "asia",
+    kind: "rss",
+    url: "https://www.theguardian.com/world/asia-pacific/rss",
+  },
+  {
     id: "cna-finance",
     outlet: "CNA",
     feed: "finance",
     kind: "cna",
     url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936",
+  },
+  {
+    id: "guardian-finance",
+    outlet: "The Guardian",
+    feed: "finance",
+    kind: "rss",
+    url: "https://www.theguardian.com/business/rss",
   },
   {
     id: "st-singapore",

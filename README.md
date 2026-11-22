@@ -9,8 +9,8 @@ A focused, self-hosted news reader that collects complete articles, groups relat
 - **Daily feed:** browse one day at a time, rank by relevance, and collapse outlets covering the same event.
 - **Article reader:** read cleaned full text, export Markdown or PDF, and ask questions grounded in one article.
 - **Archive search:** combine PostgreSQL full-text search, highlighted matches, filters, and typo tolerance.
-- **Ask the archive:** retrieve relevant articles using lexical and vector search before generating a cited answer.
-- **Personal library:** clip a URL or save an article for later.
+- **Ask:** answer general questions directly or retrieve relevant archive articles for a sourced news answer.
+- **Personal library:** save feed articles, add outside links, filter by origin, and sort a reading list.
 - **Source controls:** enable or disable individual feeds without deleting collected articles.
 
 ```text
@@ -25,15 +25,15 @@ RSS feeds -> ingest pipeline -> Postgres + pgvector -> feed / search / library
 - Tailwind CSS 4 and HeroUI
 - PostgreSQL 18 with `pgvector`, `pg_trgm`, and generated `tsvector` search
 - Drizzle ORM and startup migrations
-- OpenAI for grounded answers and Gemini for scoring and embeddings
+- OpenRouter for chat and Gemini for optional scoring and embeddings
 - Readability, Cheerio, and JSDOM for article extraction
 - Docker Compose and Gotenberg for PDF export
 
 ## Live deployment
 
-The public deployment ingests TLDR, CNA, and The Straits Times once each morning through an authenticated Vercel Cron route. Page visits never start a crawl. Articles are deduplicated, clipped into readable Markdown, grouped by story, and stored in PostgreSQL.
+The public deployment ingests 20 feeds from TLDR, CNA, The Straits Times, The Guardian, The Verge, TechCrunch, Ars Technica, and Al Jazeera once each morning through an authenticated Vercel Cron route. Page visits never start a crawl. Articles are deduplicated, clipped into readable Markdown, grouped by story, and stored in PostgreSQL.
 
-Ask uses OpenAI's Responses API with archive-only tools. `GEMINI_API_KEY` is optional: when omitted, relevance scoring and vector embeddings are skipped and Ask falls back to PostgreSQL lexical retrieval.
+Ask uses OpenRouter's free model router. It can answer general questions directly and call archive search tools when a question needs collected news. `GEMINI_API_KEY` is optional: when omitted, relevance scoring and vector embeddings are skipped and archive retrieval falls back to PostgreSQL lexical search.
 
 For a stable local demo without external crawling, keep `ENABLE_PIPELINE=false` and seed the sample archive:
 

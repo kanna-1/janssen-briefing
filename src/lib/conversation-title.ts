@@ -4,7 +4,7 @@ import type { ChatMessage } from "./types";
  * Naming a conversation without a model, and the ceiling every title obeys.
  *
  * Split out from `lib/conversations` so the browser can import it. That module
- * reaches for `lib/openai` and an API key, which is fine on a route handler and
+ * reaches for `lib/openrouter` and an API key, which is fine on a route handler and
  * wrong in a bundle — but the history drawer needs this exact rule to label a
  * conversation that has not been saved yet, and a second copy of a truncation
  * rule is a copy that drifts. One definition, both sides.

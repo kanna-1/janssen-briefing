@@ -13,7 +13,7 @@ interface ArticleRowProps {
   rescoringArticles?: Set<string>;
   menuTrigger?: React.ReactNode;
   /** Reports the source currently showing, and whether it counts as read. */
-  onActiveChange?: (active: { slug: string; read: boolean }) => void;
+  onActiveChange?: (active: { slug: string; read: boolean; library: boolean }) => void;
   /**
    * Override how the title renders. Receives the currently shown source, so a
    * grouped row keeps the right title when swiped. Used by search to mark
@@ -29,8 +29,8 @@ export function ArticleRow({ article, rescoringArticles, menuTrigger, onActiveCh
   const read = useReadState(active.slug, active.read);
 
   useEffect(() => {
-    onActiveChange?.({ slug: active.slug, read });
-  }, [active.slug, read, onActiveChange]);
+    onActiveChange?.({ slug: active.slug, read, library: active.library });
+  }, [active.slug, active.library, read, onActiveChange]);
 
   /** See `ArticleCard` — the swipe that ended in this click gets first refusal. */
   const handleClick = (e: React.MouseEvent) => {

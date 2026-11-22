@@ -12,7 +12,7 @@ import { ARCHIVE_TZ } from "@/lib/dates";
 import type { ArticleFilters } from "@/lib/types";
 
 export function Feed({ initialView = "grid", initialFilters }: { initialView?: ViewMode; initialFilters: ArticleFilters }) {
-  const { articles, dates, loading, fetching, error, filters, setFilters, lastFetchTime, rescoringArticles, rescoreArticle, lastRescoredSlug, deleteArticle } = useArticles(initialFilters);
+  const { articles, dates, loading, fetching, error, filters, setFilters, lastFetchTime, rescoringArticles, rescoreArticle, lastRescoredSlug, saveArticle, deleteArticle } = useArticles(initialFilters);
   const [view, handleViewChange] = useViewMode(FEED_VIEW_COOKIE, initialView);
   const skipEntranceRef = useRef(false);
 
@@ -77,6 +77,7 @@ export function Feed({ initialView = "grid", initialFilters }: { initialView?: V
         sort={filters.sort}
         rescoringArticles={rescoringArticles}
         onRescore={rescoreArticle}
+        onSave={saveArticle}
         onDelete={deleteArticle}
         lastRescoredSlug={lastRescoredSlug}
         skipEntranceRef={skipEntranceRef}

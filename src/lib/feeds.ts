@@ -172,16 +172,40 @@ interface RSSFeedOptions {
   parseCategory?: (item: RSSParser.Item, defaultCategory: string) => string;
   /** Transform raw summary text (e.g. strip HTML) */
   transformSummary?: (raw: string) => string;
+  /** CNA/ST aggregate feeds need URL reclassification; section feeds do not. */
+  inferFeedFromPath?: boolean;
 }
 
 async function fetchRSSArticles(options: RSSFeedOptions): Promise<RawArticle[]> {
-  const { source, feedUrl, feed, extraPathMappings, parseCategory, transformSummary } = options;
+  const {
+    source,
+    feedUrl,
+    feed,
+    extraPathMappings,
+    parseCategory,
+    transformSummary,
+    inferFeedFromPath = true,
+  } = options;
   const articles: RawArticle[] = [];
   const defaultCategory = feed === "finance" ? "Business" : feed.charAt(0).toUpperCase() + feed.slice(1);
   const allMappings = [...FEED_PATH_MAPPINGS, ...(extraPathMappings ?? [])];
 
   try {
-    const rss = await parser.parseURL(feedUrl);
+    // Fetch ourselves instead of relying on rss-parser's default HTTP client.
+    // Some publishers reject its generic request headers even though the feed
+    // is public, while accepting a clearly identified reader user agent.
+    const response = await fetch(feedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; JanssenBriefing/1.0)",
+        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      throw new Error(`Status code ${response.status}`);
+    }
+
+    const rss = await parser.parseString(await response.text());
 
     for (const item of rss.items) {
       if (!item.link || !item.title) continue;
@@ -200,10 +224,12 @@ async function fetchRSSArticles(options: RSSFeedOptions): Promise<RawArticle[]> 
       // Infer feed from URL path — RSS feeds can include cross-section articles
       const urlPath = new URL(item.link).pathname;
       let resolvedFeed: FeedType = feed;
-      for (const mapping of allMappings) {
-        if (urlPath.startsWith(mapping.prefix)) {
-          resolvedFeed = mapping.feed;
-          break;
+      if (inferFeedFromPath) {
+        for (const mapping of allMappings) {
+          if (urlPath.startsWith(mapping.prefix)) {
+            resolvedFeed = mapping.feed;
+            break;
+          }
         }
       }
 
@@ -256,6 +282,20 @@ export function fetchSTArticles(
     feedUrl,
     feed,
     transformSummary: (raw) => raw.replace(/<[^>]*>/g, ""),
+  });
+}
+
+export function fetchGenericRSSArticles(
+  feedUrl: string,
+  feed: FeedType,
+  source: string
+): Promise<RawArticle[]> {
+  return fetchRSSArticles({
+    source,
+    feedUrl,
+    feed,
+    inferFeedFromPath: false,
+    transformSummary: (raw) => raw.replace(/<[^>]*>/g, "").trim(),
   });
 }
 

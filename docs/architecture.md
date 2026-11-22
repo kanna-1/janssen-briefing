@@ -93,10 +93,10 @@ embeds, the schema decides what survives rendering, the `EmbedIframe` component
 decides what gets mounted) because each catches what the others cannot.
 
 The reader has a **chat panel** — a side panel on desktop, a full-screen sheet on
-mobile — backed by `POST /api/chat`. Unlike Ask, it needs no retrieval: the entire
-article is pasted into the system prompt, so the model is grounded by construction.
-It can still reach for OpenAI's web search to fill in background the article assumes,
-or developments since it was published.
+mobile — backed by `POST /api/chat`. Unlike Ask, it needs no retrieval: the article
+is pasted into the system prompt, so questions about it are grounded by construction.
+The same assistant can answer an unrelated general question, but it does not pretend
+the article supports facts that are absent from the text.
 
 Also here: download as Markdown (`/api/markdown`, prefixed with a short source/date/reading-time
 header) or PDF, and share via Telegram — either the original source URL or your own archive link.
@@ -110,8 +110,9 @@ scraped page and that browser.
 
 ### Ask `/ask`
 
-The interesting one. A chat against the whole archive, where the model cannot see
-anything until it searches for it.
+Ask is a general chat with optional archive access. Ordinary knowledge, software,
+writing, and everyday questions are answered directly. Questions about recent news or
+the collected archive can use search tools and return article cards as evidence.
 
 #### The request loop
 
@@ -137,24 +138,19 @@ flowchart TD
     Z --> Y[flush web citations · DONE]
 ```
 
-Two budgets bound a reply: **6 turns** and **14 tool calls**. Turns alone are not a
-budget, because the model issues several calls per turn — one observed run spent 17
-of them, thirteen searches, five returning nothing, before answering. Each search
-costs a query embedding against a 1,000-per-day allowance, so an unbounded appetite
-for searching is what would actually exhaust the free tier.
+Two budgets bound a reply: **3 turns** and **4 archive tool calls**. Turns alone are
+not a budget because a model can issue several calls in one turn. The smaller limits
+keep free-router usage predictable while leaving enough room to search, open a result,
+and write a final answer.
 
 Identical calls are served from a per-reply cache. The model repeats itself, sometimes
 twice in one turn, and every repeat used to re-run the query, spend another embedding,
 and show the reader the same search again. The call is still *answered* — the API
 pairs one output to every `call_id` — but only the result is reused.
 
-When the budget runs out, tools are **not** withheld. They stay declared and
-`tool_choice` flips to `"none"`. Removing the definitions makes the model emit raw
-call syntax (`to=functions.get_article`, `multi_tool_use.parallel`) as literal answer
-text, because it still intends to call a tool and no longer has a channel for it.
-Declared-but-forbidden is a state it understands. The same trick forces a final answer
-if the turn limit arrives while tools are still pending, so you get a reply rather than
-a list of searches and silence.
+When the budget runs out, `tool_choice` flips to `"none"` to force a final answer.
+The route uses OpenRouter's Chat Completions-compatible streaming format and reconstructs
+streamed function-call arguments before executing either archive tool.
 
 Tools: `search_articles` and `get_article`. The model can only use the collected archive,
 and every cited source is a markdown link to `/article/the-slug`.
@@ -394,7 +390,7 @@ round of clipping, and another story-matching pass.
 ```mermaid
 flowchart LR
     subgraph P1["Phase 1 — awaited, blocks the response"]
-        A[fetch enabled sources<br/>TLDR scrape · CNA RSS · ST RSS] --> B[dedupe in batch<br/>and against source_id / source_url]
+        A[fetch enabled sources<br/>TLDR scrape · publisher RSS] --> B[dedupe in batch<br/>and against source_id / source_url]
         B --> C[clip full text<br/>Readability → Markdown]
         C --> D[insert]
         D --> E[match stories<br/>trigram title similarity]
@@ -412,8 +408,9 @@ key, scoring and embeddings are skipped and lexical retrieval remains available.
 share one memoised `finalize`, so a joined run cannot report itself complete while
 enrichment is still going.
 
-**Sources.** Ten in the registry: two TLDR sections, four CNA feeds, four Straits Times
-feeds. TLDR is *scraped* from dated digest pages rather than pulled from RSS, and each run
+**Sources.** Twenty in the registry: two TLDR sections plus publisher feeds from CNA,
+The Straits Times, The Guardian, The Verge, TechCrunch, Ars Technica, and Al Jazeera.
+TLDR is *scraped* from dated digest pages rather than pulled from RSS, and each run
 re-checks yesterday's digest too, because today's often isn't published when the early
 cron fires (the dated URL 307s to the undated section page until then, which the scraper
 detects instead of silently parsing the wrong page). Which sources run is read from the
@@ -562,11 +559,11 @@ database that was merely slow to start into a few retries.
 | `/api/cron/ingest` | GET | Authenticated scheduled ingest. |
 | `/api/fetch` | POST | Authenticated manual ingest. |
 | `/api/search` | GET | Full-text search with highlights and paging. |
-| `/api/ask` | POST | Archive chat. SSE: text deltas, step chips, article cards, sources. |
+| `/api/ask` | POST | General and archive chat. SSE: text deltas, step chips, article cards, sources. |
 | `/api/chat` | POST | Single-article chat. SSE. |
 | `/api/conversations` | GET | Ask history, titles only. |
 | `/api/conversations/[id]` | GET · PUT · DELETE | Read, upsert, delete one thread. |
-| `/api/library` | GET · POST · DELETE | List, clip a pasted URL, remove (delete if pasted, unsave if from the feed). |
+| `/api/library` | GET · POST · DELETE | List, save a feed article or clip a pasted URL, then unsave/delete it. |
 | `/api/read-marks` | PUT · POST | Mark one article; throw the feature switch. |
 | `/api/settings/feeds` | GET · PUT | Read the source roster; patch switches. |
 | `/api/markdown` | GET | Download an article as `.md`. |
