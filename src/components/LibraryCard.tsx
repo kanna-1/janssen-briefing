@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import type { Article } from "@/lib/types";
-import type { PendingClip } from "@/hooks/useLibrary";
 import { feedColor } from "./article-shared";
 import { toDateStr } from "./ArticleTimeline";
 
@@ -10,8 +9,7 @@ import { toDateStr } from "./ArticleTimeline";
  * The day it was added to the library, as the `YYYY-MM-DD` the rest of the app
  * writes dates in.
  *
- * `saved_at`, not `date` — the two agree for a pasted page but not for a saved
- * feed article, where `date` is the day the story was published and could be
+ * `saved_at`, not `date`: `date` is the day the story was published and could be
  * weeks before the reader kept it. Labelling that one "Saved on" would be a
  * plain lie, and it is the case this label exists to describe.
  *
@@ -22,7 +20,6 @@ function savedOn(article: Article): string {
   return article.savedAt ? toDateStr(new Date(article.savedAt)) : article.date;
 }
 
-/** Shared with {@link ClippingCard} so a clip lands in the slot it was held in. */
 const CARD_SHELL = "relative flex flex-col rounded-lg p-5 h-[220px] overflow-hidden";
 
 /** The same, for the list view's shorter shell. */
@@ -34,13 +31,8 @@ interface LibraryCardProps {
 }
 
 /**
- * A clipped article, in the feed's card language minus the parts a clip has no
- * answer for.
- *
- * No relevance score and no feed tag: both rank an article against the day's
- * news and the reader's interests, and a clip was chosen by hand — it is
- * already the thing those were trying to find. In their place the card says
- * when it was saved, which is the only ordering the library has.
+ * A saved article in the feed's card language, with its saved date replacing
+ * the relevance score used to rank the daily feed.
  */
 export function LibraryCard({ article, menuTrigger }: LibraryCardProps) {
   return (
@@ -94,30 +86,6 @@ export function LibraryCard({ article, menuTrigger }: LibraryCardProps) {
 }
 
 /**
- * The placeholder held in the grid while a paste is being fetched.
- *
- * It reserves the slot the finished card will occupy, which is what lets the
- * real card fade in where the reader is already looking instead of shoving the
- * grid down a row on arrival. The dashed border says it is not an article yet.
- */
-export function ClippingCard({ clip }: { clip: PendingClip }) {
-  return (
-    <div
-      className={`${CARD_SHELL} bg-card-bg border-2 border-dashed border-border justify-center items-center gap-3`}
-    >
-      <div className="flex items-center gap-2">
-        <svg className="animate-spin h-4 w-4 text-accent" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-          <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        <span className="thinking-shimmer text-sm font-medium">Clipping</span>
-      </div>
-      <span className="text-xs text-muted max-w-full truncate px-4">{clip.domain}</span>
-    </div>
-  );
-}
-
-/**
  * The list-view form of {@link LibraryCard}.
  *
  * Mirrors `ArticleRow` in shape and spacing so switching views on either page
@@ -162,21 +130,5 @@ export function LibraryRow({ article, menuTrigger }: LibraryCardProps) {
         )}
       </div>
     </Link>
-  );
-}
-
-/** {@link ClippingCard} for the list view, holding a row-height slot. */
-export function ClippingRow({ clip }: { clip: PendingClip }) {
-  return (
-    <div
-      className={`${ROW_SHELL} items-center gap-3 bg-card-bg border-2 border-dashed border-border`}
-    >
-      <svg className="animate-spin h-4 w-4 text-accent shrink-0" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-        <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-      <span className="thinking-shimmer text-sm font-medium">Clipping</span>
-      <span className="text-xs text-muted truncate">{clip.domain}</span>
-    </div>
   );
 }

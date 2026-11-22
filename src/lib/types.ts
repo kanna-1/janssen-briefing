@@ -1,15 +1,12 @@
 /**
  * Which section an article belongs to.
  *
- * `library` is the odd one out: it is not a source the pipeline fetches but the
- * bucket every hand-clipped article lands in, so it never appears in the feed
- * filter's tabs or in the feeds the Ask tools can scope to. It exists in the
- * union because `articles.feed` is `NOT NULL` and a clip has to say something
- * honest there.
+ * `library` is a reserved legacy origin, not a publisher feed. The current
+ * Library uses the separate `Article.library` membership flag instead.
  */
 export type FeedType = "tech" | "ai" | "singapore" | "world" | "asia" | "finance" | "library";
 
-/** The `feed` value every hand-clipped article carries. */
+/** Reserved legacy origin; library membership is stored separately. */
 export const LIBRARY_FEED = "library" as const;
 
 export interface RawArticle {

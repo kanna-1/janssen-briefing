@@ -10,7 +10,7 @@ A focused, self-hosted news reader that collects complete articles, groups relat
 - **Article reader:** read cleaned full text, export Markdown or PDF, and ask questions grounded in one article.
 - **Archive search:** combine PostgreSQL full-text search, highlighted matches, filters, and typo tolerance.
 - **Ask:** answer general questions directly or retrieve relevant archive articles for a sourced news answer.
-- **Personal library:** save feed articles, add outside links, filter by origin, and sort a reading list.
+- **Personal library:** save feed articles for later, then search and sort the reading list.
 - **Source controls:** enable or disable individual feeds without deleting collected articles.
 
 ```text

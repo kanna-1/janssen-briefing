@@ -3,9 +3,7 @@ import { LIBRARY_FEED, type FeedType } from "./types";
 /**
  * A feed the pipeline actually fetches.
  *
- * `library` is excluded for the reason it exists at all: it is the bucket
- * hand-clipped articles land in, not a section anything is pulled from, so it
- * can never have a source behind it.
+ * `library` is a reserved legacy origin, not a section with a source.
  */
 export type NewsFeed = Exclude<FeedType, typeof LIBRARY_FEED>;
 

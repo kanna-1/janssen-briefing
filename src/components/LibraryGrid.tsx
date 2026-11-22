@@ -2,9 +2,8 @@
 
 import { useCallback } from "react";
 import { motion } from "motion/react";
-import { LIBRARY_FEED, type Article } from "@/lib/types";
-import type { PendingClip } from "@/hooks/useLibrary";
-import { ClippingCard, ClippingRow, LibraryCard, LibraryRow } from "./LibraryCard";
+import type { Article } from "@/lib/types";
+import { LibraryCard, LibraryRow } from "./LibraryCard";
 import { ArticleContextMenu } from "./ArticleContextMenu";
 import { LoadingCard, LoadingRow } from "./LoadingCard";
 import type { ViewMode } from "./ArticleGrid";
@@ -18,11 +17,9 @@ import {
 
 interface LibraryGridProps {
   articles: Article[];
-  pending: PendingClip[];
   loading: boolean;
   view?: ViewMode;
-  /** Takes it out of the library — which deletes a pasted page but only
-   *  unsaves a feed article. See the DELETE handler in `/api/library`. */
+  /** Unsaves the article without deleting it from the news archive. */
   onRemove: (slug: string) => Promise<void>;
 }
 
@@ -37,13 +34,10 @@ interface LibraryGridProps {
  * refetch can replace every row at once. Here the list only ever changes one
  * card at a time and the keys carry the slug, so mounting *is* the signal:
  * React reuses the element of every article that was already on screen, which
- * leaves the entrance to run on exactly the cards that just appeared. A paste
- * shifts the grid down a slot under the placeholder, the finished card fades
- * into that slot, and a delete slides the survivors back up.
+ * leaves the entrance to run on exactly the cards that just appeared.
  */
 export function LibraryGrid({
   articles,
-  pending,
   loading,
   view = "grid",
   onRemove,
@@ -55,7 +49,7 @@ export function LibraryGrid({
     // `view` is a layout input like the others: switching it moves every card,
     // and without it here the grid would jump between layouts instead of
     // sliding into the new one.
-    deps: [articles, pending, view],
+    deps: [articles, view],
   });
 
   const handleRemove = useCallback(
@@ -81,17 +75,6 @@ export function LibraryGrid({
 
   return (
     <div className={layoutClass}>
-      {pending.map((clip) => (
-        <motion.div
-          key={clip.url}
-          initial={entranceInitial}
-          animate={entranceAnimate}
-          transition={entranceTransition(0)}
-        >
-          {isList ? <ClippingRow clip={clip} /> : <ClippingCard clip={clip} />}
-        </motion.div>
-      ))}
-
       {articles.map((article, i) => (
         <motion.div
           // Keyed by view as well as slug, so switching layout remounts every
@@ -113,11 +96,7 @@ export function LibraryGrid({
             sourceDomain={article.sourceDomain}
             title={article.title}
             onDelete={handleRemove}
-            // A pasted page exists only because it was saved, so removing it
-            // really is a delete. A feed article was here first and stays.
-            deleteLabel={
-              article.feed === LIBRARY_FEED ? "Delete" : "Remove from library"
-            }
+            deleteLabel="Remove from library"
           >
             {(menuTrigger) =>
               isList ? (

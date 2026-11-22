@@ -305,10 +305,8 @@ The precision counterpart to Ask's retrieval, over every day on record.
   similarity against titles, and the UI says so (`mode: "fuzzy"`). Running off the end of
   a paginated result never falls back, so "load more" cannot append fuzzy matches to a
   query that has exact ones.
-- **Scope:** feed, an inclusive date range from a calendar, sort, and a **Library** scope.
-  Search is the one place pasted pages are not excluded — here you are looking for an
-  article, not reading the day's news, so a page you saved is as valid an answer as a
-  fetched one.
+- **Scope:** feed, an inclusive date range from a calendar, sort, and a **Library** scope
+  for searching only articles the reader saved.
 - **Paging:** offsets advance by *rows consumed*, not cards rendered, because story
   grouping shrinks the page. Copies of a story that straddle a page boundary are folded
   into the existing card's source switcher rather than appearing as a second card.
@@ -319,44 +317,11 @@ The precision counterpart to Ask's retrieval, over every day on record.
 
 ### Library `/library`
 
-Your own clippings, plus anything from the feed you chose to keep.
-
-Paste a URL — ⌘V works anywhere on the page, not just in a field — and `POST /api/library`
-fetches it, extracts the readable article with Mozilla Readability, converts it to
-Markdown with Turndown (GFM tables, fenced code, trusted iframes preserved), and derives
-everything a card needs — title, summary, domain — **without a model call**,
-since the library is reader-paced and unbudgeted while the Gemini quota is neither. A
-page's own meta description wins over its opening lines as a summary only if it is long
-enough to be about *that page* rather than the whole site.
-
-It is deliberately one slow request rather than a job the client polls: you pasted one
-link and are watching one placeholder card, which says everything a progress endpoint
-would.
-
-Guards worth knowing about:
-
-- **SSRF.** This is the only fetch in the app aimed by whoever is looking at the page, and
-  the server sits on a private network with a database and the cloud's instance metadata
-  service (`169.254.169.254`) around it. Literal loopback, link-local, private IPv4
-  ranges, the `100.64.0.0/10` range Tailscale addresses live in, ULA/link-local IPv6,
-  IPv4-mapped IPv6 spellings of any of those, and `.local` / `.internal` / `.home` /
-  `.lan` / `.ts.net` are refused. The check runs at connect time, in `guardedFetch`
-  (`src/lib/guarded-fetch.ts`): on the literal host, and on every address a name actually
-  resolves to for that connection, so a public name pointing inside and a redirect leading
-  inside are both refused, with no gap between checking and connecting. The article clipper
-  uses it too, since a Hacker News or newsletter link is chosen by a stranger as well. The
-  route also resolves the name once up front, only to answer "points inside your network"
-  instead of storing a link-only save.
-- **Tracking parameters** (`utm_*`, `fbclid`, `gclid`, `igshid`, …) are stripped before
-  storage, so the same article cannot be saved twice under two URLs that differ only in
-  how it was shared.
-- **A URL the pipeline already fetched is saved, not refused.** Only a URL already *in the
-  library* comes back as a duplicate, because then there is nothing left to do.
-- **Origin and membership are separate.** `feed = 'library'` means you pasted it;
-  `library = true` means you kept it. A saved Straits Times story is in your library *and*
-  still in Thursday's feed, still scored, still grouped with the other outlets that ran it.
-  Removing a pasted page deletes it (it existed only because you saved it); removing a
-  saved feed article just unsaves it.
+Articles from the feed that the reader chose to keep. Open the article menu, or right-click
+a card, and select **Save to library**. `POST /api/library` sets the article's library flag
+and saved timestamp; it does not duplicate or move the article, so the same story remains
+in its original feed, with its score and story group intact. Removing it from the library
+only clears that membership.
 
 The list is unpaginated and ordered by `saved_at`, not `created_at` — for a saved feed
 article `created_at` is when the pipeline ingested the story, which would file last week's
@@ -563,7 +528,7 @@ database that was merely slow to start into a few retries.
 | `/api/chat` | POST | Single-article chat. SSE. |
 | `/api/conversations` | GET | Ask history, titles only. |
 | `/api/conversations/[id]` | GET · PUT · DELETE | Read, upsert, delete one thread. |
-| `/api/library` | GET · POST · DELETE | List, save a feed article or clip a pasted URL, then unsave/delete it. |
+| `/api/library` | GET · POST · DELETE | List, save, and unsave feed articles. |
 | `/api/read-marks` | PUT · POST | Mark one article; throw the feature switch. |
 | `/api/settings/feeds` | GET · PUT | Read the source roster; patch switches. |
 | `/api/markdown` | GET | Download an article as `.md`. |
@@ -598,11 +563,9 @@ at the near end.
 
 The recurring ideas, stated once here because they explain most of the code:
 
-**Origin and membership are different questions.** `feed = 'library'` records where an article
-came from; `library = true` records that you kept it. An earlier column tried to mean both, which
-made saving a feed article impossible to express. The archive-vs-clippings split is enforced in
-exactly one place per path — `pipelineOnly` in the query builder, `PIPELINE_ONLY` in raw SQL —
-and the search page is the single deliberate exception.
+**Origin and membership are different questions.** `feed` records the publisher section;
+`library = true` records that the reader kept the article. Saving therefore never moves or
+duplicates a story, and removing it from the Library never deletes it from the archive.
 
 **Null is the retry queue.** Unscored and unembedded articles are simply null, and every
 catch-up pass is a query for them. Nothing records failures separately, and nothing overwrites a

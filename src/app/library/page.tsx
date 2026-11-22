@@ -5,7 +5,7 @@ import { LIBRARY_VIEW_COOKIE, parseViewCookie } from "@/lib/view-cookie";
 
 export const metadata: Metadata = {
   title: "Library — Janssen's Briefing",
-  description: "Articles you clipped yourself.",
+  description: "News articles you saved for later.",
 };
 
 export default async function Library() {

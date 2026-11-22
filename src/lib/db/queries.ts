@@ -10,9 +10,8 @@ import { groupByStory } from "../group-stories";
  *
  * Origin, not membership. Every query behind the home feed, the Ask retrieval,
  * and the scoring and embedding passes carries it, because all of them are
- * about the archive the app gathers: a page the reader pasted was never in a
- * feed, has no publication day worth filing under, and should not spend the
- * Gemini quota the day's news needs.
+ * about the archive the app gathers. The reserved legacy `library` origin was
+ * never a publisher feed and is excluded from news processing.
  *
  * What it deliberately does *not* test is `articles.library`. A saved Straits
  * Times story is in the reader's library and still in Thursday's feed, still
@@ -757,24 +756,13 @@ export async function searchArticles(
   const fromFilter = from ? sql` AND a.date >= ${from}` : sql``;
   const toFilter = to ? sql` AND a.date <= ${to}` : sql``;
 
-  // `library` is a scope, not a feed. It reads `articles.library` —
-  // membership, not the origin `pipelineOnly` tests — because a saved Straits
-  // Times story is in the library every bit as much as a pasted page, and
-  // scoping by origin would hide exactly the articles this scope exists to
-  // find.
-  //
-  // Nothing is excluded on the other paths. "All" means all, pasted pages
-  // included: this is the one page where a reader is looking for an article
-  // rather than reading the day's news, and a page they saved is as valid an
-  // answer as a fetched one. A named feed (`tech`, `world`) still leaves
-  // pasted pages out on its own, since none of them carries that feed.
-  //
-  // Search is alone in this. The home feed and the Ask retrieval exclude them
-  // unconditionally via `pipelineOnly` and `retrievalScope` — that is where the
-  // separation lives, and nothing here touches it.
+  // `library` is a scope, not an origin feed. It reads the membership flag so
+  // saved articles remain searchable under their original news sections too.
   const searchingLibrary = feed === LIBRARY_FEED;
   const feedFilter =
-    feed && feed !== "all" && !searchingLibrary ? sql` AND a.feed = ${feed}` : sql``;
+    feed && feed !== "all" && !searchingLibrary
+      ? sql` AND a.feed = ${feed}`
+      : sql` AND a.feed <> ${LIBRARY_FEED}`;
   const libraryFilter = searchingLibrary ? sql` AND a.library = true` : sql``;
 
   // Every arm below inherits this: the ranked query, the no-results probe, the
@@ -1025,9 +1013,6 @@ export async function deleteArticle(slug: string): Promise<void> {
 /**
  * Everything in the reader's library, most recently saved first.
  *
- * Both kinds: pages pasted on `/library` and feed articles the reader kept,
- * which is why it tests `library` rather than the origin `pipelineOnly` reads.
- *
  * Unfiltered and unpaginated, unlike the feed — the library is what one person
  * chose to keep, so it is small by construction and showing all of it is the
  * point. `idx_articles_library` is a partial index on `saved_at`, so this reads
@@ -1036,13 +1021,16 @@ export async function deleteArticle(slug: string): Promise<void> {
 export async function getLibraryArticles(
   options?: { search?: string }
 ): Promise<Article[]> {
-  const conditions: (SQL | undefined)[] = [eq(articles.library, true)];
+  const conditions: (SQL | undefined)[] = [
+    eq(articles.library, true),
+    ne(articles.feed, LIBRARY_FEED),
+  ];
 
   const search = options?.search?.trim();
   if (search) {
     // The same matching the feed's own search box uses, for the same reason:
-    // `search_vector` is a generated column, so a clip has been indexed over
-    // its full body since the moment it was stored, and a title-only filter
+    // `search_vector` is a generated column, so each article is indexed over
+    // its full body, and a title-only filter
     // would ignore the part of it worth searching. The domain check is the
     // same fallback too — `source_domain` is not in the vector, so without it
     // you could not find a clip by where it came from.
@@ -1082,33 +1070,13 @@ export async function addToLibrary(slug: string): Promise<void> {
 /**
  * Takes an article out of the library.
  *
- * Unsaving, not deleting — the caller decides which it wants. A pasted page
- * exists only because it was saved, so removing it from the library should
- * delete it; a feed article outlives its stay here and must survive.
+ * Unsaving does not delete or move the article from its original feed.
  */
 export async function removeFromLibrary(slug: string): Promise<void> {
   await db
     .update(articles)
     .set({ library: false, savedAt: null })
     .where(eq(articles.slug, slug));
-}
-
-/**
- * The article stored under a URL, pasted or fetched, if there is one.
- *
- * `source_url` is uniquely indexed, so the same URL cannot be stored twice.
- * This is how the clip route learns that *before* fetching the page, and can
- * save the row it already has instead of failing on a constraint.
- */
-export async function getArticleBySourceUrl(
-  sourceUrl: string
-): Promise<Article | null> {
-  const rows = await db
-    .select(articleColumns)
-    .from(articles)
-    .where(eq(articles.sourceUrl, sourceUrl))
-    .limit(1);
-  return rows[0] ? rowToArticle(rows[0]) : null;
 }
 
 /**

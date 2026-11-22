@@ -239,7 +239,7 @@ export function ArticleContextMenu({ slug, sourceUrl, sourceDomain, title, child
                   onClick={handleRescore}
                   className="w-full text-left px-4 py-2 text-sm hover:bg-accent/10 transition-colors cursor-pointer"
                 >
-                  Rescore
+                  Refresh relevance
                 </button>
               )}
               <button
