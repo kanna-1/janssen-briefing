@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clearReadMarks, setReadMark, setSetting } from "@/lib/db/queries";
 import { READ_MARKS_SETTING, readMarksSettingValue } from "@/lib/read-marks";
 import { getReadMarksEnabled } from "@/lib/read-marks-server";
+import { requireTrustedMutation } from "@/lib/request-security";
 
 /**
  * Writes only.
@@ -25,6 +26,9 @@ import { getReadMarksEnabled } from "@/lib/read-marks-server";
  * remember.
  */
 export async function PUT(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const body = await request.json().catch(() => null);
   const slug: unknown = body?.slug;
   const read: unknown = body?.read;
@@ -66,6 +70,9 @@ export async function PUT(request: NextRequest) {
  * asking the client to follow up with a delete means it cannot half-happen.
  */
 export async function POST(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const body = await request.json().catch(() => null);
   const enabled: unknown = body?.enabled;
 

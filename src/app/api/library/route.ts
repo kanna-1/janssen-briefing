@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/queries";
 import { LIBRARY_FEED } from "@/lib/types";
 import { LOG_TITLE_LEN } from "@/lib/api-utils";
+import { requireTrustedMutation } from "@/lib/request-security";
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get("search") || undefined;
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
  * Save an existing feed article to the library.
  */
 export async function POST(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const body = await request.json().catch(() => null);
 
   if (!body?.slug || typeof body.slug !== "string") {
@@ -44,6 +48,9 @@ export async function POST(request: NextRequest) {
  * This clears library membership without deleting the article from its feed.
  */
 export async function DELETE(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const body = await request.json().catch(() => null);
 
   if (!body?.slug || typeof body.slug !== "string") {

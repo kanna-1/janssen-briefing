@@ -5,6 +5,7 @@ import {
   updateArticleEmbedding,
 } from "@/lib/db/queries";
 import { embedAndStore } from "@/lib/embeddings";
+import { requireMaintenanceAuthorization } from "@/lib/request-security";
 
 /**
  * How many articles one call will embed.
@@ -19,6 +20,9 @@ import { embedAndStore } from "@/lib/embeddings";
 const MAX_PER_RUN = 50;
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireMaintenanceAuthorization(request);
+  if (unauthorized) return unauthorized;
+
   if (process.env.ENABLE_PIPELINE === "false") {
     return NextResponse.json({ message: "Pipeline disabled" });
   }

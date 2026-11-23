@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUnscoredArticles, getAllArticlesForScoring, updateRelevanceScore } from "@/lib/db/queries";
 import { scoreArticle } from "@/lib/scorer";
 import { LOG_TITLE_LEN } from "@/lib/api-utils";
+import { requireMaintenanceAuthorization } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireMaintenanceAuthorization(request);
+  if (unauthorized) return unauthorized;
+
   if (process.env.ENABLE_PIPELINE === "false") {
     return NextResponse.json({ message: "Pipeline disabled" });
   }

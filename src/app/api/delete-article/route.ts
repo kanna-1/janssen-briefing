@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteArticle } from "@/lib/db/queries";
 import { parseSlugRequest, LOG_TITLE_LEN } from "@/lib/api-utils";
+import { requireTrustedMutation } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const result = await parseSlugRequest(request);
   if ("error" in result) return result.error;
 

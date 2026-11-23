@@ -87,8 +87,11 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 npm run lint
+npm run test
 npm run build
 ```
+
+Run all release checks together with `npm run check`. GitHub Actions enforces the same command on every pull request and push to `main`.
 
 ## Deployment
 

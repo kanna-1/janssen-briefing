@@ -6,6 +6,7 @@ import {
   saveConversation,
 } from "@/lib/db/queries";
 import { generateConversationTitle, sanitiseMessages } from "@/lib/conversations";
+import { requireTrustedMutation } from "@/lib/request-security";
 
 /** `params` is a promise in this version of Next; see `docs/.../route.md`. */
 type Context = { params: Promise<{ id: string }> };
@@ -50,6 +51,9 @@ export async function GET(_request: NextRequest, { params }: Context) {
  * is not waiting on anything this returns.
  */
 export async function PUT(request: NextRequest, { params }: Context) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const { id } = await params;
 
   if (!UUID.test(id)) {
@@ -75,7 +79,10 @@ export async function PUT(request: NextRequest, { params }: Context) {
   return NextResponse.json({ conversation });
 }
 
-export async function DELETE(_request: NextRequest, { params }: Context) {
+export async function DELETE(request: NextRequest, { params }: Context) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const { id } = await params;
 
   if (!UUID.test(id)) {

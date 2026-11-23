@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { updateRelevanceScore } from "@/lib/db/queries";
 import { scoreArticle } from "@/lib/scorer";
 import { parseSlugRequest, LOG_TITLE_LEN } from "@/lib/api-utils";
+import { limitRequest, requireTrustedMutation } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
+  const rejected =
+    requireTrustedMutation(request) ?? limitRequest(request, "rescore", 5, 60_000);
+  if (rejected) return rejected;
+
   const result = await parseSlugRequest(request);
   if ("error" in result) return result.error;
 

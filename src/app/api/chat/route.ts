@@ -7,10 +7,17 @@ import {
   streamOpenRouterChat,
   type OpenRouterMessage,
 } from "@/lib/openrouter";
+import { limitRequest, rejectOversizedBody, requireTrustedMutation } from "@/lib/request-security";
 
 export const maxDuration = 90;
 
 export async function POST(request: NextRequest) {
+  const rejected =
+    requireTrustedMutation(request) ??
+    rejectOversizedBody(request, 128_000) ??
+    limitRequest(request, "article-chat", 15, 60_000);
+  if (rejected) return rejected;
+
   if (!OPENROUTER_API_KEY) {
     return NextResponse.json(
       { error: "Chat is not configured. Add OPENROUTER_API_KEY to the deployment." },

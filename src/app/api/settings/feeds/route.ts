@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFeedSourceOverrides, setFeedSourceOverrides } from "@/lib/db/queries";
 import { isKnownSourceId, resolveFeedSources } from "@/lib/feed-sources";
+import { requireTrustedMutation } from "@/lib/request-security";
 
 /** The current roster, with the reader's switches applied. */
 export async function GET() {
@@ -19,6 +20,9 @@ export async function GET() {
  * the table forever, matching nothing and explaining nothing.
  */
 export async function PUT(request: NextRequest) {
+  const rejected = requireTrustedMutation(request);
+  if (rejected) return rejected;
+
   const body = await request.json().catch(() => null);
   const updates: unknown = body?.updates;
 

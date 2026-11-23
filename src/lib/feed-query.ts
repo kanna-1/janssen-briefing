@@ -1,5 +1,8 @@
 import type { ArticleFilters } from "@/lib/types";
 
+const VALID_FEEDS = new Set(["all", "singapore", "world", "asia", "finance", "ai", "tech"]);
+const VALID_SORTS = new Set(["relevance", "date-desc", "date-asc"]);
+
 /** Filter <-> query-string translation, shared by the server component that
  *  renders the first feed payload and the client hook that asks for every one
  *  after it. Both sides must agree character for character: the server seeds
@@ -29,11 +32,14 @@ function parseDateParam(raw: string | null): string | undefined {
 }
 
 export function filtersFromParams(params: URLSearchParams): ArticleFilters {
+  const feed = params.get("feed");
+  const sort = params.get("sort");
+
   return {
-    feed: (params.get("feed") as ArticleFilters["feed"]) || "all",
+    feed: (feed && VALID_FEEDS.has(feed) ? feed : "all") as ArticleFilters["feed"],
     date: parseDateParam(params.get("date")),
     search: params.get("search") || undefined,
-    sort: (params.get("sort") as ArticleFilters["sort"]) || "relevance",
+    sort: (sort && VALID_SORTS.has(sort) ? sort : "relevance") as ArticleFilters["sort"],
   };
 }
 

@@ -9,6 +9,7 @@ import {
   type OpenRouterMessage,
   type OpenRouterTool,
 } from "@/lib/openrouter";
+import { limitRequest, rejectOversizedBody, requireTrustedMutation } from "@/lib/request-security";
 
 const MAX_TURNS = 3;
 const MAX_TOOL_CALLS = 4;
@@ -25,6 +26,12 @@ const archiveTools: OpenRouterTool[] = askTools.map((tool) => ({
 }));
 
 export async function POST(request: NextRequest) {
+  const rejected =
+    requireTrustedMutation(request) ??
+    rejectOversizedBody(request, 128_000) ??
+    limitRequest(request, "ask", 10, 60_000);
+  if (rejected) return rejected;
+
   if (!OPENROUTER_API_KEY) {
     return Response.json(
       { error: "Ask is not configured. Add OPENROUTER_API_KEY to the deployment." },
