@@ -12,7 +12,7 @@
     "seed:demo": "tsx --env-file=.env scripts/seed-demo.ts"
   },
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "dependencies": {
     "@heroui/react": "^3.1.0",
